@@ -73,7 +73,30 @@ export interface MealLog {
   fat_g: number;
   carbs_g: number;
   food_preset_id: number | null;
+  barcode?: string | null;
   logged_at: string;
+}
+
+export interface FoodLookup {
+  barcode: string;
+  name: string;
+  kcal: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+  source: "open_food_facts";
+  serving_note?: string;
+}
+
+export interface MealLogCreate {
+  log_date: string;
+  name: string;
+  kcal: number;
+  protein_g: number;
+  fat_g: number;
+  carbs_g: number;
+  food_preset_id?: number | null;
+  barcode?: string | null;
 }
 
 export interface HealthSyncRequest {

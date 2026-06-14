@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: Sanpo-ban API
-  version: 1.0.0
+  version: 2.0.0
   description: |
-    散歩判 v1 API。詳細設計 v1-core.md に基づく。
-    認証なし（LAN 内単一利用者）。全操作 ROLE-001。
+    散歩判 API。v1-core + v2-barcode 詳細設計に基づく。
+    認証なし（LAN / Tailscale 内単一利用者）。全操作 ROLE-001。
 
 servers:
   - url: http://localhost:8080
@@ -14,6 +14,7 @@ tags:
   - name: profile
   - name: dashboard
   - name: meals
+  - name: foods
   - name: weights
   - name: sync
   - name: walks
@@ -162,6 +163,34 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/foods/barcode/{barcode}:
+    get:
+      tags: [foods]
+      summary: Lookup product nutrition by barcode (Open Food Facts)
+      x-usecase: v2-barcode
+      x-requirements: [FR-015, FR-037]
+      parameters:
+        - name: barcode
+          in: path
+          required: true
+          description: JAN/EAN 8-14 digits
+          schema:
+            type: string
+            pattern: "^[0-9]{8,14}$"
+      responses:
+        "200":
+          description: Product found and normalized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodLookup"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/BarcodeNotFound"
+        "502":
+          $ref: "#/components/responses/OffUnavailable"
+
   /api/v1/meals:
     get:
       tags: [meals]
@@ -186,7 +215,7 @@ paths:
     post:
       tags: [meals]
       summary: Add meal log
-      x-requirements: [FR-011, FR-012]
+      x-requirements: [FR-011, FR-012, FR-038]
       requestBody:
         required: true
         content:
@@ -286,6 +315,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/WeightLog"
 
+  /api/v1/weights/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    delete:
+      tags: [weights]
+      summary: Delete weight log
+      x-requirements: [FR-036]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/sync/health:
     post:
       tags: [sync]
@@ -348,6 +390,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WalkSession"
+
+  /api/v1/walks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    delete:
+      tags: [walks]
+      summary: Delete walk session
+      x-requirements: [FR-036]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/exercises/treadmill:
     get:
@@ -514,6 +569,26 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    BarcodeNotFound:
+      description: Product not found in Open Food Facts
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: BARCODE_NOT_FOUND
+              message: Product not found in Open Food Facts
+    OffUnavailable:
+      description: Open Food Facts temporarily unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: OFF_UNAVAILABLE
+              message: Open Food Facts is temporarily unavailable
 
   schemas:
     ErrorResponse:
@@ -526,7 +601,13 @@ components:
           properties:
             code:
               type: string
-              enum: [VALIDATION_ERROR, NOT_FOUND, PROFILE_NOT_SETUP, INTERNAL_ERROR]
+              enum:
+                - VALIDATION_ERROR
+                - NOT_FOUND
+                - PROFILE_NOT_SETUP
+                - INTERNAL_ERROR
+                - BARCODE_NOT_FOUND
+                - OFF_UNAVAILABLE
             message:
               type: string
 
@@ -675,6 +756,33 @@ components:
         sort_order:
           type: integer
 
+    FoodLookup:
+      type: object
+      required: [barcode, name, kcal, protein_g, fat_g, carbs_g, source]
+      properties:
+        barcode:
+          type: string
+          pattern: "^[0-9]{8,14}$"
+        name:
+          type: string
+        kcal:
+          type: integer
+          minimum: 0
+        protein_g:
+          type: number
+          minimum: 0
+        fat_g:
+          type: number
+          minimum: 0
+        carbs_g:
+          type: number
+          minimum: 0
+        source:
+          type: string
+          enum: [open_food_facts]
+        serving_note:
+          type: string
+
     MealLog:
       type: object
       properties:
@@ -696,6 +804,10 @@ components:
         food_preset_id:
           type: integer
           nullable: true
+        barcode:
+          type: string
+          nullable: true
+          pattern: "^[0-9]{8,14}$"
         logged_at:
           type: string
           format: date-time
@@ -720,6 +832,10 @@ components:
         food_preset_id:
           type: integer
           nullable: true
+        barcode:
+          type: string
+          nullable: true
+          pattern: "^[0-9]{8,14}$"
 
     WeightLog:
       type: object
