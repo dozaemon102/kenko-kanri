@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TargetMacros(BaseModel):
@@ -118,6 +118,20 @@ class HealthSyncRequest(BaseModel):
     date: date
     steps: int = Field(ge=0)
     weight_kg: float | None = Field(default=None, ge=30, le=300)
+
+    @field_validator("weight_kg", mode="before")
+    @classmethod
+    def normalize_optional_weight(cls, value: object) -> object | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            value = stripped
+        if value == 0:
+            return None
+        return value
 
 
 class WalkCreate(BaseModel):

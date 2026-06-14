@@ -65,10 +65,24 @@ def test_health_sync_and_dashboard(client):
     r = client.post("/api/v1/sync/health", json={"date": "2026-06-13", "steps": 9000})
     assert r.status_code == 200
 
+    r = client.post(
+        "/api/v1/sync/health",
+        json={"date": "2026-06-13", "steps": 9100, "weight_kg": None},
+    )
+    assert r.status_code == 200
+    assert r.json()["weight_logged"] is False
+
+    r = client.post(
+        "/api/v1/sync/health",
+        json={"date": "2026-06-13", "steps": 9200, "weight_kg": ""},
+    )
+    assert r.status_code == 200
+    assert r.json()["weight_logged"] is False
+
     r = client.get("/api/v1/dashboard/today", params={"date": "2026-06-13"})
     assert r.status_code == 200
     data = r.json()
-    assert data["steps"] == 9000
+    assert data["steps"] == 9200
     assert data["burn"]["walk_kcal"] > 0
 
 
