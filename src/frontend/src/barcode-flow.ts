@@ -1,7 +1,9 @@
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { api } from "./api/client";
 import type { FoodLookupResponse, MealCreate } from "./types";
 
-type BarcodeFormat = "ean_13" | "upc_a" | "ean_8";
+type BarcodeFormatName = "ean_13" | "upc_a" | "ean_8";
 
 interface BarcodeDetectorLike {
   detect(source: HTMLVideoElement | ImageBitmap): Promise<Array<{ rawValue: string }>>;
@@ -9,7 +11,7 @@ interface BarcodeDetectorLike {
 
 declare global {
   interface Window {
-    BarcodeDetector?: new (options?: { formats?: BarcodeFormat[] }) => BarcodeDetectorLike;
+    BarcodeDetector?: new (options?: { formats?: BarcodeFormatName[] }) => BarcodeDetectorLike;
   }
 }
 
@@ -131,6 +133,58 @@ function escapeHtml(value: string): string {
   return escapeAttr(value);
 }
 
+function setManualInputValue(code: string): void {
+  const input = document.getElementById("barcode-manual") as HTMLInputElement | null;
+  if (input) input.value = code;
+}
+
+async function startBarcodeDetectorScan(
+  video: HTMLVideoElement,
+  onCode: (code: string) => void
+): Promise<() => void> {
+  const detector = new window.BarcodeDetector!({
+    formats: ["ean_13", "upc_a", "ean_8"],
+  });
+  let scanning = false;
+  const timer = window.setInterval(() => {
+    if (scanning) return;
+    scanning = true;
+    void detector
+      .detect(video)
+      .then((codes) => {
+        if (!codes.length) return;
+        const code = codes[0]!.rawValue.trim();
+        if (!validateBarcode(code)) return;
+        onCode(code);
+      })
+      .catch(() => {})
+      .finally(() => {
+        scanning = false;
+      });
+  }, 400);
+  return () => window.clearInterval(timer);
+}
+
+async function startZxingScan(video: HTMLVideoElement, onCode: (code: string) => void): Promise<() => void> {
+  const hints = new Map();
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+    BarcodeFormat.EAN_13,
+    BarcodeFormat.UPC_A,
+    BarcodeFormat.EAN_8,
+  ]);
+  const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 500 });
+  const controls = await reader.decodeFromVideoDevice(undefined, video, (result, _err, ctrl) => {
+    if (!result) return;
+    const code = result.getText().trim();
+    if (!validateBarcode(code)) return;
+    ctrl.stop();
+    onCode(code);
+  });
+  return () => {
+    controls.stop();
+  };
+}
+
 export function openBarcodeFlow(logDate: string, onDone: () => Promise<void>): void {
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -142,15 +196,14 @@ export function openBarcodeFlow(logDate: string, onDone: () => Promise<void>): v
   document.body.appendChild(overlay);
 
   const body = overlay.querySelector("#barcode-modal-body") as HTMLElement;
-  let stream: MediaStream | null = null;
-  let scanTimer: number | null = null;
+  let scanCleanup: (() => void) | null = null;
   let closed = false;
 
   const close = (): void => {
     if (closed) return;
     closed = true;
-    if (scanTimer != null) window.clearInterval(scanTimer);
-    stream?.getTracks().forEach((t) => t.stop());
+    scanCleanup?.();
+    scanCleanup = null;
     overlay.remove();
   };
 
@@ -159,6 +212,8 @@ export function openBarcodeFlow(logDate: string, onDone: () => Promise<void>): v
   });
 
   const lookupAndConfirm = async (code: string): Promise<void> => {
+    scanCleanup?.();
+    scanCleanup = null;
     body.innerHTML = `<p class="muted modal-loading">商品を検索中…</p>`;
     try {
       const lookup = await api.lookupBarcode(code);
@@ -177,15 +232,10 @@ export function openBarcodeFlow(logDate: string, onDone: () => Promise<void>): v
   };
 
   const startScanUi = async (): Promise<void> => {
-    const hasDetector = typeof window.BarcodeDetector !== "undefined";
     body.innerHTML = `
       <h2 class="modal-title">バーコード</h2>
-      ${
-        hasDetector
-          ? `<video id="barcode-video" class="barcode-video" playsinline muted autoplay></video>
-             <p class="muted">カメラをバーコードに向けてください</p>`
-          : `<p class="muted">このブラウザはカメラスキャンに非対応です。番号を入力してください。</p>`
-      }
+      <video id="barcode-video" class="barcode-video" playsinline muted autoplay></video>
+      <p class="muted">カメラをバーコードに向けてください</p>
       <div class="field"><label>バーコード番号</label><input id="barcode-manual" inputmode="numeric" placeholder="8〜14桁" /></div>
       <button class="btn btn-primary btn-block" id="barcode-search">検索</button>
       <button class="btn btn-block modal-secondary" id="barcode-manual-only">手入力で追加</button>
@@ -195,6 +245,8 @@ export function openBarcodeFlow(logDate: string, onDone: () => Promise<void>): v
 
     document.getElementById("barcode-close")!.addEventListener("click", close);
     document.getElementById("barcode-manual-only")!.addEventListener("click", () => {
+      scanCleanup?.();
+      scanCleanup = null;
       renderManualForm(body, logDate, onDone, close);
     });
 
@@ -204,44 +256,33 @@ export function openBarcodeFlow(logDate: string, onDone: () => Promise<void>): v
         (document.getElementById("scan-error")!.textContent = "8〜14桁の数字を入力してください");
         return;
       }
-      if (scanTimer != null) window.clearInterval(scanTimer);
       await lookupAndConfirm(code);
     };
 
     document.getElementById("barcode-search")!.addEventListener("click", () => void runSearch());
 
-    if (!hasDetector) return;
-
     const video = document.getElementById("barcode-video") as HTMLVideoElement;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-      });
-      video.srcObject = stream;
-      await video.play();
+    const onCode = (code: string): void => {
+      if (closed) return;
+      setManualInputValue(code);
+      void lookupAndConfirm(code);
+    };
 
-      const detector = new window.BarcodeDetector!({
-        formats: ["ean_13", "upc_a", "ean_8"],
-      });
-      let scanning = false;
-      scanTimer = window.setInterval(() => {
-        if (scanning || closed) return;
-        scanning = true;
-        void detector
-          .detect(video)
-          .then((codes) => {
-            if (closed || !codes.length) return;
-            const code = codes[0]!.rawValue.trim();
-            if (!validateBarcode(code)) return;
-            (document.getElementById("barcode-manual") as HTMLInputElement).value = code;
-            if (scanTimer != null) window.clearInterval(scanTimer);
-            void lookupAndConfirm(code);
-          })
-          .catch(() => {})
-          .finally(() => {
-            scanning = false;
-          });
-      }, 400);
+    try {
+      if (typeof window.BarcodeDetector !== "undefined") {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+        });
+        video.srcObject = stream;
+        await video.play();
+        const stopDetector = await startBarcodeDetectorScan(video, onCode);
+        scanCleanup = () => {
+          stopDetector();
+          stream.getTracks().forEach((t) => t.stop());
+        };
+      } else {
+        scanCleanup = await startZxingScan(video, onCode);
+      }
     } catch {
       (document.getElementById("scan-error")!.textContent =
         "カメラを使えません。番号入力または手入力を使ってください。");
