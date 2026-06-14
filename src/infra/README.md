@@ -1,33 +1,34 @@
-# 散歩判 — ローカル起動
+# 散歩判 — 起動方法
 
-## Docker Compose（推奨）
+## ラズパイで確認（PC に Docker 不要）← いまのおすすめ
+
+→ **[pi-native/README.md](pi-native/README.md)** を参照
+
+```bash
+# Pi 上で
+cd ~/sanpo-ban
+chmod +x src/infra/pi-native/install.sh
+./src/infra/pi-native/install.sh
+# ブラウザ: http://<PiのIP>:8080
+```
+
+## Docker Compose（PC に Docker がある場合のみ）
 
 ```bash
 cd src/infra
 docker compose up --build
 ```
 
-- API: http://localhost:8080
-- MySQL: localhost:3306（user/pass/db: `sanpo` / `sanpo` / `sanpo_ban`）
-
-## フロントエンド開発
+## フロント単体開発（Pi API に向ける）
 
 ```bash
 cd src/frontend
 npm install
-npm run dev
+# vite.config.ts の proxy 先を Pi の IP に変更するか、
+# ビルド済み dist を Pi に置いて API から配信（install.sh が実行）
 ```
-
-http://localhost:5173（API は 8080 にプロキシ）
 
 ## iPhone ショートカット
 
-1. ヘルスケア → 歩数（今日）
-2. POST `http://<PCのLAN IP>:8080/api/v1/sync/health`
-3. JSON: `{"date":"YYYY-MM-DD","steps":1234,"weight_kg":72.0}`（weight は任意）
-
-**注意:** トレッドミルを手入力した日にスマホも持つと、歩数とトレッドミルで消費 kcal が二重計上されます。
-
-## Pi + SSD
-
-MySQL の datadir を USB SSD にマウントしてから `docker compose` を利用してください（`docs/backlog.md` BL-005 参照）。
+POST `http://<PiのIP>:8080/api/v1/sync/health`  
+詳細は [pi-native/README.md](pi-native/README.md)
