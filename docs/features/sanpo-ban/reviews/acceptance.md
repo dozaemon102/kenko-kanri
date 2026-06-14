@@ -1,79 +1,86 @@
 # 最終受入レポート
 
-- **feature:** sanpo-ban
+- **feature:** sanpo-ban v2 バーコード
 - **受入日:** 2026-06-13
 - **判定:** 条件付き合格
 
 ## サマリー
 
-散歩判 MVP（v1-core）の必須機能は Raspberry Pi 上で稼働し、iPhone から UI・Health 同期が確認できた。backend 自動テスト 4 件はすべて成功。Docker Compose による AC-013 は Pi ネイティブ運用で代替確認した。将来 FR（バーコード・食べる判・筋トレ詳細等）は `future.md` へ移管済み。
+v2 バーコード食事記録（Open Food Facts 連携）を Raspberry Pi 本番（ie-desktop）+ iPhone Safari で受入した。必須 AC（AC-014〜017）および v1.1 の AC-018 は達成。iOS Safari では **HTTPS（Tailscale Serve）** がライブカメラに必要であることを運用上確認。HTTP では「写真で読み取る」フォールバックで FR-037/039 を満たす。
+
+**推奨 URL:** `https://ie-desktop.tail5bd839.ts.net/`
 
 ## 受入条件（AC）達成状況
 
+### v2 スコープ
+
 | AC ID | 内容 | 達成 | 根拠（テスト・手動確認） |
 |-------|------|------|------------------------|
-| AC-001 | 初期設定後、今日ダッシュボードに目標 kcal/PFC 表示 | はい | Pi/iPhone ブラウザで初回設定→今日タブ確認 |
-| AC-002 | プリセット食事追加で摂取合計増加 | はい | `test_meal_preset_flow` + UI |
-| AC-003 | 手入力食事の追加・削除で合計増減 | はい | API 実装 + UI 手動 |
-| AC-004 | ショートカット POST で歩数 8000 反映 | はい | `test_health_sync_and_dashboard` + iPhone 実機 |
-| AC-005 | 同一日 8000→9000 で最新 9000 | はい | `test_health_sync_and_dashboard` |
-| AC-006 | weight_kg 含む POST で当日体重更新 | はい | API 実装 + ショートカット（任意体重） |
-| AC-007 | 散歩記録後、履歴に表示 | はい | Pi UI 手動確認 |
-| AC-008 | 発見メモ付き散歩が履歴に表示 | はい | API/UI 実装 + 手動 |
-| AC-009 | トレッドミル 30 分で消費 kcal 増加 | はい | UI 手動（計算式 `treadmill_burn_kcal` 実装） |
-| AC-010 | 筋トレ 45 分で消費 kcal 増加 | はい | UI 手動（`strength_burn_kcal` 実装） |
-| AC-011 | 手入力体重がダッシュボード・履歴に反映 | はい | `POST /weights` + UI |
-| AC-012 | 7 日データで週サマリー表示 | はい | `GET /summary/week` 実装 + UI 週タブ |
-| AC-013 | Docker Compose 起動後ブラウザアクセス | 代替 | Docker 未使用。Pi ネイティブ + systemd で同等確認（`pi-native/README.md`） |
+| AC-014 | 有効 JAN/EAN スキャン → 確認画面に名称・kcal・P/F/C | はい | Pi + iPhone（HTTPS）。backend `test_barcode.py` / API モック |
+| AC-015 | 確認画面追加 → 当日摂取合計増加 | はい | Pi UI 確認 |
+| AC-016 | OFF 未登録 → 手入力フォームへ | はい | 404 `BARCODE_NOT_FOUND` → 手入力 UI。`test_lookup_barcode_not_found` |
+| AC-017 | バーコード追加でプリセット件数不増 | はい | `food_preset_id: null` 固定。`test_barcode_lookup_api` で presets 0 件確認 |
+| AC-018 | 誤記録削除 → 集計から除外 | はい | v1.1 実装済。各タブ削除 UI（v1 受入で確認済、v2 でも継続） |
 
-- **必須 AC 未達:** なし（AC-013 は運用形態差を Pi で代替）
+- **必須 AC 未達:** なし
+
+### v1 スコープ（参照）
+
+AC-001〜013 は 2026-06-13 v1 受入（Pi + iPhone）で **承認済**。v2 変更による回帰なし。
 
 ## トレーサビリティ（FR → 設計 → コード → テスト）
 
 | 要件 ID | 詳細設計 | 実装 | テスト | 状態 |
 |---------|----------|------|--------|------|
-| FR-001〜004 | v1-core §2 | `PUT /profile`, `ProfileUpdate` | `test_health_sync`（profile 前提） | OK |
-| FR-005〜009 | v1-core §2 | `dashboard_service`, frontend 今日タブ | `test_health_sync_and_dashboard` | OK |
-| FR-010〜013 | v1-core §2 | food-presets, meals routes | `test_meal_preset_flow` | OK |
-| FR-014 | v1-core §2 | `POST /meals/{id}/duplicate` | 手動 | OK |
-| FR-017〜019 | v1-core §2 | weights routes, dashboard | 手動 | OK |
-| FR-020〜023 | v1-core §2 | `POST /sync/health` | `test_health_sync_and_dashboard` | OK |
-| FR-024〜026 | v1-core §2 | walks routes | 手動 | OK |
-| FR-027〜029 | v1-core §2 | treadmill routes, calculations | 手動 | OK |
-| FR-030〜031 | v1-core §2 | strength routes, calculations | 手動 | OK |
-| FR-033 | v1-core §2 | `GET /summary/week` | 手動 | OK |
+| FR-015 | v2-barcode §2 GET /foods/barcode | `open_food_facts.py`, `routes.py` | `test_barcode.py` | OK |
+| FR-037 | v2-barcode §4.2 カメラ/手入力 | `barcode-flow.ts`（BarcodeDetector / ZXing / 写真） | 実機（Pi HTTPS） | OK |
+| FR-038 | v2-barcode §4.3 確認画面 | `barcode-flow.ts` renderConfirmForm | 実機 | OK |
+| FR-039 | v2-barcode §5.1 404/502 フォールバック | `barcode-flow.ts`, `errors.py` | `test_lookup_barcode_not_found` + 実機 | OK |
+| FR-036 | v1-core / v2 §10 | DELETE routes + 各タブ UI | v1 受入 | OK |
 
 - **必須 FR の断絶:** なし
 
 ## 権限マトリクスの検証
 
+認証・認可なし（NFR-002）。v2 新 API も同一。LAN / Tailscale 内単一利用者前提 — **OK**。
+
 | 操作 / FR | 期待 | 実装・テスト | 状態 |
 |-----------|------|-------------|------|
-| FR-001〜033（ROLE-001） | 認証なしで全 API 利用可 | 認証ミドルウェアなし、全 route 公開 | OK |
-| NFR-002 | LAN 内単一利用者 | Tailscale/LAN 前提の運用ドキュメント | OK |
+| FR-015〜039 | ROLE-001 全操作可 | 認可チェックなし（設計どおり） | OK |
 
 ## 将来要件の移管
 
 | FR ID | 概要 | 移管先 |
 |-------|------|--------|
-| FR-015 | Open Food Facts バーコード | `future.md` |
-| FR-016 | 食べる判 | `future.md` |
-| FR-032 | 筋トレ詳細 | `future.md` |
-| FR-034, FR-035 | 旅モード・Insta | `future.md` |
+| FR-016 | 食べる判 ○△× | `docs/features/sanpo-ban/future.md` |
+| FR-032 | 筋トレ詳細（重量・セット） | 同上 |
+| FR-034 | 旅先モード | 同上 |
+| FR-035 | Instagram タグメモ | 同上 |
+| FR-014 | 食事複製（任意） | 同上 |
 
 ## verify-run 結果（参照）
 
-- 判定: **条件付き合格**（`reviews/verify-run.md`）
-- backend pytest 4/4 成功。Pi + iPhone 実機 OK
+- **判定:** 条件付き合格（`reviews/verify-run.md`）
+- **補足:** Phase 5 時点は Pi 未検証だったが、本受入で Pi migration・build・restart・Tailscale HTTPS を完了
 
 ## review-code との整合
 
-- `reviews/code.md` の Critical がすべて解消されていること: **はい**（Critical 0 件）
+- `reviews/code.md` の Critical: **0 件（すべて解消）**
+- Suggestion（Pi 反映・フロントテスト・duplicate barcode）は本受入で Pi 反映済。残: フロント自動テストなし（Suggestion のみ）
+
+## 運用メモ（v2 追加分）
+
+| 項目 | 内容 |
+|------|------|
+| HTTPS | iPhone Safari ライブカメラに必須。`tailscale serve --https=443 http://127.0.0.1:8080` |
+| HTTP | `http://100.76.191.46:8080` も利用可（カメラ以外）。バーコードは「写真で読み取る」 |
+| Alembic | Pi では `uv run alembic upgrade head` |
+| ショートカット | Health 同期 URL を HTTPS に更新推奨 |
 
 ## 未達・フォローアップ
 
 | 項目 | 対応 |
 |------|------|
-| AC-013 Docker Compose | Pi ネイティブで代替済。必要なら compose verify を backlog へ |
-| API 自動テスト不足 | Suggestion として Phase 2 前に散歩/運動/週次テスト追加 |
-| Phase 2 機能 | `future.md` / `backlog.md` 参照。イントーク後に再開 |
+| フロントエンド自動テストなし | v3 以降または hotfix で検討 |
+| duplicate_meal が barcode を複製しない | v2.1 候補（任意） |
+| Tailscale Serve の永続化 | Pi 再起動後も serve 設定が残るか運用確認 |

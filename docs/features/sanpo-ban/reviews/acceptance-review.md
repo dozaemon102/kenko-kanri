@@ -6,7 +6,7 @@
 
 ## サマリー
 
-必須 AC・必須 FR の突合は完了している。AC-013 の Docker Compose 未実施は Pi ネイティブ代替として理由が明記されており、MVP 受入として許容できる。Critical 指摘なし。
+v2 必須 AC（AC-014〜017）および FR-015/037〜039 の達成根拠が記載されている。Pi 実機・Tailscale HTTPS の運用条件が明記されており、verify-run / review-code との整合も取れている。Critical 指摘なし。
 
 ## 指摘一覧
 
@@ -20,8 +20,8 @@
 
 | ID | 該当箇所 | 指摘 | 修正案 |
 |----|----------|------|--------|
-| S-01 | AC 達成表 | 散歩・運動・週次 AC が主に手動根拠 | Phase 2 前に API テスト追加 |
-| S-02 | AC-013 | Docker 未検証のまま | compose verify または要件文言を Pi 正に更新 |
+| S-001 | 運用メモ | Tailscale Serve の再起動後挙動 | `tailscale serve` を systemd または README に文書化 |
+| S-002 | フォローアップ | フロント自動テスト未整備 | 任意。v3 または hotfix |
 
 ## チェックリスト結果
 
