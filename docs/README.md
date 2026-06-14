@@ -22,7 +22,7 @@
 ## UI
 
 - 画面あり（スマホブラウザ優先の Web UI）
-- デザインシステム: 基本設計承認後に選択
+- デザインシステム: **notion**（`.agents/resources/design-systems/notion/`）
 
 ## 事前調査
 
