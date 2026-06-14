@@ -1,0 +1,8 @@
+{
+  "name": "散歩判",
+  "short_name": "散歩判",
+  "display": "standalone",
+  "theme_color": "#5645d4",
+  "background_color": "#f6f5f4",
+  "start_url": "/"
+}

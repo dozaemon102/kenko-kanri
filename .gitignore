@@ -24,8 +24,10 @@ Thumbs.db
 
 # Node (frontend)
 node_modules/
-.next/
 dist/
+
+# Python venv
+.venv/
 
 # MySQL / Docker local data
 data/mysql/

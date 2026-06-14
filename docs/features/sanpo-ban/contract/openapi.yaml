@@ -1,0 +1,876 @@
+openapi: 3.0.3
+info:
+  title: Sanpo-ban API
+  version: 1.0.0
+  description: |
+    散歩判 v1 API。詳細設計 v1-core.md に基づく。
+    認証なし（LAN 内単一利用者）。全操作 ROLE-001。
+
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose
+
+tags:
+  - name: profile
+  - name: dashboard
+  - name: meals
+  - name: weights
+  - name: sync
+  - name: walks
+  - name: exercises
+  - name: summary
+
+paths:
+  /api/v1/profile:
+    get:
+      tags: [profile]
+      summary: Get user profile
+      x-requirements: [FR-001, FR-004]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [profile]
+      summary: Create or update profile
+      x-requirements: [FR-001, FR-002, FR-003, FR-004]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/profile/recalculate-targets:
+    post:
+      tags: [profile]
+      summary: Recalculate TDEE and PFC targets
+      x-requirements: [FR-002, FR-003]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current_weight_kg:
+                  type: number
+                  format: float
+      responses:
+        "200":
+          description: Suggested targets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TargetMacros"
+
+  /api/v1/dashboard/today:
+    get:
+      tags: [dashboard]
+      summary: Today dashboard
+      x-requirements: [FR-005, FR-006, FR-007, FR-008, FR-009]
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardToday"
+        "409":
+          $ref: "#/components/responses/ProfileNotSetup"
+
+  /api/v1/food-presets:
+    get:
+      tags: [meals]
+      summary: List food presets
+      x-requirements: [FR-010, FR-011]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FoodPreset"
+    post:
+      tags: [meals]
+      summary: Create food preset
+      x-requirements: [FR-010]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FoodPresetCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodPreset"
+
+  /api/v1/food-presets/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    put:
+      tags: [meals]
+      summary: Update food preset
+      x-requirements: [FR-010]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FoodPresetCreate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodPreset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [meals]
+      summary: Delete food preset
+      x-requirements: [FR-010]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/meals:
+    get:
+      tags: [meals]
+      summary: List meals for a date
+      x-requirements: [FR-013]
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MealLog"
+    post:
+      tags: [meals]
+      summary: Add meal log
+      x-requirements: [FR-011, FR-012]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MealLogCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealLog"
+
+  /api/v1/meals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    delete:
+      tags: [meals]
+      summary: Delete meal log
+      x-requirements: [FR-013]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/meals/{id}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [meals]
+      summary: Duplicate meal to another date
+      x-requirements: [FR-014]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [log_date]
+              properties:
+                log_date:
+                  type: string
+                  format: date
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealLog"
+
+  /api/v1/weights:
+    get:
+      tags: [weights]
+      summary: Weight history
+      x-requirements: [FR-019]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WeightLog"
+    post:
+      tags: [weights]
+      summary: Log weight manually
+      x-requirements: [FR-017]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [weight_kg]
+              properties:
+                weight_kg:
+                  type: number
+                  format: float
+                logged_at:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeightLog"
+
+  /api/v1/sync/health:
+    post:
+      tags: [sync]
+      summary: Sync steps and optional weight from iPhone Shortcuts
+      x-requirements: [FR-020, FR-021, FR-022, FR-023]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthSyncRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  steps:
+                    type: integer
+                  weight_logged:
+                    type: boolean
+
+  /api/v1/walks:
+    get:
+      tags: [walks]
+      summary: Walk session history
+      x-requirements: [FR-026]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WalkSession"
+    post:
+      tags: [walks]
+      summary: Record walk session
+      x-requirements: [FR-024, FR-025]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WalkSessionCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalkSession"
+
+  /api/v1/exercises/treadmill:
+    get:
+      tags: [exercises]
+      summary: List treadmill logs for a date
+      x-requirements: [FR-027]
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TreadmillLog"
+    post:
+      tags: [exercises]
+      summary: Log treadmill session
+      x-requirements: [FR-027, FR-028, FR-029]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TreadmillLogCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TreadmillLog"
+
+  /api/v1/exercises/treadmill/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    delete:
+      tags: [exercises]
+      summary: Delete treadmill log
+      x-requirements: [FR-027]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/exercises/strength/templates:
+    get:
+      tags: [exercises]
+      summary: Strength exercise templates
+      x-requirements: [FR-030]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StrengthTemplate"
+
+  /api/v1/exercises/strength:
+    get:
+      tags: [exercises]
+      summary: List strength logs for a date
+      x-requirements: [FR-030]
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StrengthLog"
+    post:
+      tags: [exercises]
+      summary: Log strength session
+      x-requirements: [FR-030, FR-031]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StrengthLogCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrengthLog"
+
+  /api/v1/exercises/strength/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    delete:
+      tags: [exercises]
+      summary: Delete strength log
+      x-requirements: [FR-030]
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/summary/week:
+    get:
+      tags: [summary]
+      summary: Weekly summary
+      x-requirements: [FR-033]
+      parameters:
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekSummary"
+
+components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ProfileNotSetup:
+      description: Profile not set up
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR, NOT_FOUND, PROFILE_NOT_SETUP, INTERNAL_ERROR]
+            message:
+              type: string
+
+    Sex:
+      type: string
+      enum: [male, female]
+
+    TargetMacros:
+      type: object
+      properties:
+        kcal:
+          type: integer
+        protein_g:
+          type: number
+        fat_g:
+          type: number
+        carbs_g:
+          type: number
+
+    Profile:
+      type: object
+      properties:
+        height_cm:
+          type: number
+        birth_date:
+          type: string
+          format: date
+        sex:
+          $ref: "#/components/schemas/Sex"
+        activity_factor:
+          type: number
+        target_kcal:
+          type: integer
+        target_protein_g:
+          type: number
+        target_fat_g:
+          type: number
+        target_carbs_g:
+          type: number
+        initial_weight_kg:
+          type: number
+        setup_completed:
+          type: boolean
+
+    ProfileUpdate:
+      type: object
+      required: [height_cm, birth_date, sex, activity_factor, current_weight_kg]
+      properties:
+        height_cm:
+          type: number
+        birth_date:
+          type: string
+          format: date
+        sex:
+          $ref: "#/components/schemas/Sex"
+        activity_factor:
+          type: number
+        current_weight_kg:
+          type: number
+        target_kcal:
+          type: integer
+        target_protein_g:
+          type: number
+        target_fat_g:
+          type: number
+        target_carbs_g:
+          type: number
+        setup_completed:
+          type: boolean
+
+    MacroTotals:
+      type: object
+      properties:
+        kcal:
+          type: integer
+        protein_g:
+          type: number
+        fat_g:
+          type: number
+        carbs_g:
+          type: number
+
+    DashboardToday:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        targets:
+          $ref: "#/components/schemas/TargetMacros"
+        intake:
+          $ref: "#/components/schemas/MacroTotals"
+        burn:
+          type: object
+          properties:
+            walk_kcal:
+              type: integer
+            treadmill_kcal:
+              type: integer
+            strength_kcal:
+              type: integer
+            total_kcal:
+              type: integer
+        remaining:
+          $ref: "#/components/schemas/MacroTotals"
+        steps:
+          type: integer
+        weight_kg:
+          type: number
+          nullable: true
+        walk_sessions_today:
+          type: integer
+
+    FoodPreset:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        kcal:
+          type: integer
+        protein_g:
+          type: number
+        fat_g:
+          type: number
+        carbs_g:
+          type: number
+        sort_order:
+          type: integer
+
+    FoodPresetCreate:
+      type: object
+      required: [name, kcal, protein_g, fat_g, carbs_g]
+      properties:
+        name:
+          type: string
+        kcal:
+          type: integer
+        protein_g:
+          type: number
+        fat_g:
+          type: number
+        carbs_g:
+          type: number
+        sort_order:
+          type: integer
+
+    MealLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        log_date:
+          type: string
+          format: date
+        name:
+          type: string
+        kcal:
+          type: integer
+        protein_g:
+          type: number
+        fat_g:
+          type: number
+        carbs_g:
+          type: number
+        food_preset_id:
+          type: integer
+          nullable: true
+        logged_at:
+          type: string
+          format: date-time
+
+    MealLogCreate:
+      type: object
+      required: [log_date, name, kcal, protein_g, fat_g, carbs_g]
+      properties:
+        log_date:
+          type: string
+          format: date
+        name:
+          type: string
+        kcal:
+          type: integer
+        protein_g:
+          type: number
+        fat_g:
+          type: number
+        carbs_g:
+          type: number
+        food_preset_id:
+          type: integer
+          nullable: true
+
+    WeightLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        weight_kg:
+          type: number
+        source:
+          type: string
+          enum: [manual, shortcuts]
+        logged_at:
+          type: string
+          format: date-time
+
+    HealthSyncRequest:
+      type: object
+      required: [date, steps]
+      properties:
+        date:
+          type: string
+          format: date
+        steps:
+          type: integer
+          minimum: 0
+        weight_kg:
+          type: number
+          nullable: true
+
+    WalkSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        walked_at:
+          type: string
+          format: date-time
+        discovery_note:
+          type: string
+          nullable: true
+
+    WalkSessionCreate:
+      type: object
+      properties:
+        walked_at:
+          type: string
+          format: date-time
+        discovery_note:
+          type: string
+          maxLength: 500
+
+    TreadmillLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        logged_at:
+          type: string
+          format: date-time
+        minutes:
+          type: integer
+        speed_kmh:
+          type: number
+          nullable: true
+        incline_pct:
+          type: number
+          nullable: true
+        machine_kcal:
+          type: integer
+          nullable: true
+        calculated_kcal:
+          type: integer
+
+    TreadmillLogCreate:
+      type: object
+      required: [minutes]
+      properties:
+        minutes:
+          type: integer
+        speed_kmh:
+          type: number
+        incline_pct:
+          type: number
+        machine_kcal:
+          type: integer
+          nullable: true
+
+    StrengthTemplate:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        met:
+          type: number
+
+    StrengthLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        logged_at:
+          type: string
+          format: date-time
+        exercise_code:
+          type: string
+        minutes:
+          type: integer
+        calculated_kcal:
+          type: integer
+
+    StrengthLogCreate:
+      type: object
+      required: [exercise_code, minutes]
+      properties:
+        exercise_code:
+          type: string
+        minutes:
+          type: integer
+
+    WeekSummary:
+      type: object
+      properties:
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        avg_intake_kcal:
+          type: number
+        avg_steps:
+          type: number
+        weight_trend:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              weight_kg:
+                type: number
+                nullable: true
+        counts:
+          type: object
+          properties:
+            walk_sessions:
+              type: integer
+            treadmill_sessions:
+              type: integer
+            strength_sessions:
+              type: integer

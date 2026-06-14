@@ -1,0 +1,180 @@
+:root {
+  --primary: #5645d4;
+  --primary-pressed: #4534b3;
+  --surface: #f6f5f4;
+  --surface-soft: #fafaf9;
+  --canvas: #ffffff;
+  --charcoal: #37352f;
+  --slate: #5d5b54;
+  --steel: #787671;
+  --hairline: #e5e3df;
+  --mint: #d9f3e1;
+  --peach: #ffe8d4;
+  --sky: #dcecfa;
+  --lavender: #e6e0f5;
+  --success: #1aae39;
+  --error: #e03131;
+  font-family: Inter, "Notion Sans", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--charcoal);
+  padding-bottom: 72px;
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.page {
+  padding: 16px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.card {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.card.mint { background: var(--mint); border-color: transparent; }
+.card.peach { background: var(--peach); border-color: transparent; }
+.card.sky { background: var(--sky); border-color: transparent; }
+.card.lavender { background: var(--lavender); border-color: transparent; }
+
+.stat-lg {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--slate);
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:active {
+  background: var(--primary-pressed);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: 80px;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(86, 69, 212, 0.35);
+}
+
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--surface-soft);
+  border-top: 1px solid var(--hairline);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 4px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--steel);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.tab.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.field label {
+  display: block;
+  font-size: 0.875rem;
+  margin-bottom: 4px;
+  color: var(--slate);
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.preset-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.preset-btn {
+  text-align: left;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.preset-btn strong {
+  display: block;
+}
+
+.muted {
+  color: var(--slate);
+  font-size: 0.875rem;
+}
+
+.list-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.875rem;
+}

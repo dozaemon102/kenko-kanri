@@ -1,0 +1,104 @@
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.database import get_db
+from app.main import app
+from app.models.base import Base
+from app.models import entities  # noqa: F401
+from app.services.calculations import suggest_targets, walk_burn_kcal
+
+
+@pytest.fixture
+def client():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    TestingSession = sessionmaker(bind=engine)
+
+    def override_get_db():
+        db = TestingSession()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def test_walk_burn_kcal():
+    assert walk_burn_kcal(10000, 72) == 360
+
+
+def test_suggest_targets_male():
+    from datetime import date
+
+    result = suggest_targets(72, 175, date(1990, 1, 1), "male", 1.375, date(2026, 6, 13))
+    assert result["kcal"] >= 1200
+    assert result["protein_g"] >= 72 * 1.6
+
+
+def test_health_sync_and_dashboard(client):
+    profile = {
+        "height_cm": 175,
+        "birth_date": "1990-01-15",
+        "sex": "male",
+        "activity_factor": 1.375,
+        "current_weight_kg": 72,
+        "setup_completed": True,
+    }
+    r = client.put("/api/v1/profile", json=profile)
+    assert r.status_code == 200
+
+    r = client.post("/api/v1/sync/health", json={"date": "2026-06-13", "steps": 8000})
+    assert r.status_code == 200
+    assert r.json()["steps"] == 8000
+
+    r = client.post("/api/v1/sync/health", json={"date": "2026-06-13", "steps": 9000})
+    assert r.status_code == 200
+
+    r = client.get("/api/v1/dashboard/today", params={"date": "2026-06-13"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["steps"] == 9000
+    assert data["burn"]["walk_kcal"] > 0
+
+
+def test_meal_preset_flow(client):
+    client.put(
+        "/api/v1/profile",
+        json={
+            "height_cm": 175,
+            "birth_date": "1990-01-15",
+            "sex": "male",
+            "activity_factor": 1.375,
+            "current_weight_kg": 72,
+            "setup_completed": True,
+        },
+    )
+    preset = client.post(
+        "/api/v1/food-presets",
+        json={"name": "onigiri", "kcal": 188, "protein_g": 6, "fat_g": 5, "carbs_g": 28},
+    ).json()
+    client.post(
+        "/api/v1/meals",
+        json={
+            "log_date": "2026-06-13",
+            "name": preset["name"],
+            "kcal": 188,
+            "protein_g": 6,
+            "fat_g": 5,
+            "carbs_g": 28,
+            "food_preset_id": preset["id"],
+        },
+    )
+    dash = client.get("/api/v1/dashboard/today", params={"date": "2026-06-13"}).json()
+    assert dash["intake"]["kcal"] == 188
