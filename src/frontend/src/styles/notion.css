@@ -21,7 +21,7 @@
   --metric-amber: #eab308;
   --metric-rose: #f43f5e;
   --metric-sky: #0ea5e9;
-  --tab-bar-base: 64px;
+  --tab-bar-base: 43px;
   font-family: "SF Pro Display", Inter, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
 }
 
@@ -151,9 +151,9 @@ body {
 .tab {
   flex: 1;
   min-height: var(--tab-bar-base);
-  padding: 12px 8px 14px;
+  padding: 8px 6px 10px;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--steel);
@@ -174,9 +174,9 @@ body {
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 32px;
-  height: 4px;
-  border-radius: 0 0 4px 4px;
+  width: 22px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
   background: var(--primary);
 }
 
