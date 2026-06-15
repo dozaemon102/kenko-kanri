@@ -241,9 +241,10 @@
 1. サービス停止
 2. `DROP DATABASE IF EXISTS sanpo_ban;`
 3. `CREATE DATABASE kenko_kanri CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
-4. `.env` / `docker-compose.yml` の `MYSQL_DATABASE` / `DATABASE_URL` を `kenko_kanri` に更新
-5. `uv run alembic upgrade head`（新規 DB に全 migration 適用、または v3 用 migration で walk/target 列を含まない最終スキーマ）
-6. 設定タブで初回セットアップ（FR-004）
+4. MySQL ユーザー: 旧 `sanpo` を `DROP USER IF EXISTS 'sanpo'@'localhost';`、新規 `kenko` / `kenko` を作成し `kenko_kanri.*` に GRANT
+5. `.env` / `docker-compose.yml` の `MYSQL_DATABASE` / `MYSQL_USER` / `DATABASE_URL` を `kenko_kanri` / `kenko` に更新
+6. `uv run alembic upgrade head`（新規 DB に全 migration 適用、または v3 用 migration で walk/target 列を含まない最終スキーマ）
+7. 設定タブで初回セットアップ（FR-004）
 
 **Alembic:** migration `004_v3_kenko_kanri` で (a) `user_profile` から target 列・activity_factor 削除、(b) neat_kcal / tef_rate 追加、(c) `walk_sessions` DROP。新規 DB 向けには init migration から反映でも可。
 

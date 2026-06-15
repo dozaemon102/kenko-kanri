@@ -350,11 +350,12 @@ NEAT / TEF は独立カードにせず、収支内訳または設定のみ。
 | slug / リポジトリ | `kenko-kanri`（フォルダ・git remote・compose project 名） |
 | systemd | `kenko-kanri.service`（旧 `sanpo-ban` から置換） |
 | MySQL DB 名 | **`kenko_kanri` に変更**（旧 `sanpo_ban` は破棄。データ移行なし・初期セットアップから再開） |
-| compose / env | `MYSQL_DATABASE=kenko_kanri`、`DATABASE_URL` を更新 |
+| MySQL ユーザー | **`kenko`**（旧 `sanpo` は廃止） |
+| compose / env | `MYSQL_DATABASE=kenko_kanri`、`MYSQL_USER=kenko`、`DATABASE_URL` を更新 |
 | Tailscale serve | パス・ポートは不変。サービス再起動手順を infra に追記 |
 | PWA | アイコン背景**白**、名称「健康管理」（FR-052） |
 
-**移行手順（概要）:** ① Pi でサービス停止 ② 旧 DB `sanpo_ban` 削除（データ破棄可）③ `kenko_kanri` 新規作成 ④ env / compose 更新 ⑤ `alembic upgrade head` ⑥ 設定タブで初回セットアップ ⑦ systemd / Tailscale 名更新 ⑧ PWA 再追加
+**移行手順（概要）:** ① Pi でサービス停止 ② 旧 DB `sanpo_ban` 削除（データ破棄可）③ `kenko_kanri` 新規作成 ④ 旧 MySQL ユーザー `sanpo` 削除・`kenko` 新規作成 ⑤ env / compose 更新 ⑥ `alembic upgrade head` ⑦ 設定タブで初回セットアップ ⑧ systemd / Tailscale 名更新 ⑨ PWA 再追加
 
 **人間承認（2026-06-14）:** DB データ消失を許容し DB 名変更に合意。
 

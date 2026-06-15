@@ -7,8 +7,8 @@ APP_DIR="${APP_DIR:-/home/$APP_USER/kenko-kanri}"
 REPO_SRC="${REPO_SRC:-}"
 MYSQL_ROOT_PASS="${MYSQL_ROOT_PASS:-}"
 DB_NAME="kenko_kanri"
-DB_USER="sanpo"
-DB_PASS="${DB_PASS:-sanpo}"
+DB_USER="kenko"
+DB_PASS="${DB_PASS:-kenko}"
 
 echo "==> 健康管理 Pi セットアップ"
 echo "    APP_DIR=$APP_DIR"
@@ -55,6 +55,7 @@ else
 fi
 
 "${MYSQL_ADMIN[@]}" -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+"${MYSQL_ADMIN[@]}" -e "DROP USER IF EXISTS 'sanpo'@'localhost';"
 "${MYSQL_ADMIN[@]}" -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';"
 "${MYSQL_ADMIN[@]}" -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';"
 "${MYSQL_ADMIN[@]}" -e "FLUSH PRIVILEGES;"

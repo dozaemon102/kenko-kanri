@@ -4,8 +4,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: kenko_kanri
-      MYSQL_USER: sanpo
-      MYSQL_PASSWORD: sanpo
+      MYSQL_USER: kenko
+      MYSQL_PASSWORD: kenko
     ports:
       - "3306:3306"
     volumes:
@@ -21,7 +21,7 @@ services:
       context: ../backend
       dockerfile: ../infra/Dockerfile.backend
     environment:
-      DATABASE_URL: mysql+pymysql://sanpo:sanpo@mysql:3306/kenko_kanri
+      DATABASE_URL: mysql+pymysql://kenko:kenko@mysql:3306/kenko_kanri
       TZ: Asia/Tokyo
     ports:
       - "8080:8080"
