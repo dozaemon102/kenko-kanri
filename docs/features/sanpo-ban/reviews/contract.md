@@ -1,27 +1,35 @@
-# API 契約レビュー結果（v2）
+# API 契約レビュー結果（v3）
 
-- **対象:** `docs/features/sanpo-ban/contract/openapi.yaml`
-- **参照:** `detailed-design/v2-barcode.md`, `detailed-design/v1-core.md`
-- **レビュー日:** 2026-06-13
+- **対象:**
+  - `docs/features/sanpo-ban/contract/openapi.yaml`
+  - `docs/features/sanpo-ban/contract/types.ts`
+- **参照:** `detailed-design/v3-balance-ui.md`
+- **レビュー日:** 2026-06-14
 - **判定:** 合格
 
 ## サマリー
 
-v2 の `GET /foods/barcode/{barcode}`、`FoodLookup` スキーマ、`MealLog.barcode` が詳細設計と一致。v1.1 削除 API（walks/weights DELETE）も契約に追記済み。
+v3 詳細設計の全 API（追加 2、削除 4 系、Profile 変更、Health/Weight 体組成）が OpenAPI 3.0.3 に反映されている。廃止エンドポイントは契約から除外済み。types.ts と整合。
 
 ## 指摘一覧
 
 ### Critical
 
-| ID | 該当箇所 | 指摘 | 修正案 |
-|----|----------|------|--------|
-| — | — | なし | — |
+なし
 
 ### Suggestion
 
-| ID | 該当箇所 | 指摘 | 修正案 |
-|----|----------|------|--------|
-| — | — | なし | — |
+なし
+
+## エンドポイント突合
+
+| 詳細設計 | openapi.yaml |
+|----------|--------------|
+| GET /dashboard/top | ✓ |
+| GET /dashboard/history/{metric} | ✓ |
+| PUT/GET /profile (NEAT/TEF) | ✓ |
+| 削除: today, walks, summary, recalculate-targets | ✓ 除外 |
+| 継続: meals, foods, weights, sync, exercises | ✓ |
 
 ## チェックリスト結果
 
@@ -29,12 +37,3 @@ v2 の `GET /foods/barcode/{barcode}`、`FoodLookup` スキーマ、`MealLog.bar
 |------|------|
 | Critical | 0 |
 | Suggestion | 0 |
-
-## 詳細設計との対応
-
-| 詳細設計 | エンドポイント | openapi |
-|----------|---------------|---------|
-| v2-barcode | GET /foods/barcode/{barcode} | ✓ |
-| v2-barcode | POST /meals + barcode | ✓ |
-| v1.1 | DELETE /walks/{id} | ✓ |
-| v1.1 | DELETE /weights/{id} | ✓ |

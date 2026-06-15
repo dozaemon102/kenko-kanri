@@ -1,19 +1,30 @@
-/** Reference types generated from contract/openapi.yaml — not auto-synced */
+/** Reference types from contract/openapi.yaml v3 — not auto-synced */
 
 export type Sex = "male" | "female";
 
-export interface TargetMacros {
-  kcal: number;
-  protein_g: number;
-  fat_g: number;
-  carbs_g: number;
-}
+export type HistoryMetric =
+  | "balance"
+  | "weight"
+  | "intake"
+  | "bmr"
+  | "exercise"
+  | "steps"
+  | "body_fat_pct"
+  | "bmi"
+  | "lbm";
 
-export interface Profile extends TargetMacros {
+export type HistoryPeriod = "day" | "week" | "month" | "year";
+
+export type BmrStatus = "ok" | "lbm_missing";
+
+export type BodyCompositionSource = "today" | "latest" | "none";
+
+export interface Profile {
   height_cm: number;
   birth_date: string;
   sex: Sex;
-  activity_factor: number;
+  neat_kcal: number;
+  tef_rate: number;
   initial_weight_kg: number;
   setup_completed: boolean;
 }
@@ -22,13 +33,57 @@ export interface ProfileUpdate {
   height_cm: number;
   birth_date: string;
   sex: Sex;
-  activity_factor: number;
   current_weight_kg: number;
-  target_kcal?: number;
-  target_protein_g?: number;
-  target_fat_g?: number;
-  target_carbs_g?: number;
+  neat_kcal?: number;
+  tef_rate?: number;
   setup_completed?: boolean;
+}
+
+export interface BalanceBreakdown {
+  intake_kcal: number;
+  bmr_kcal: number | null;
+  neat_kcal: number;
+  exercise_kcal: number;
+  tef_kcal: number;
+}
+
+export interface BalanceInfo {
+  value: number | null;
+  computable: boolean;
+  breakdown: BalanceBreakdown;
+}
+
+export interface DashboardCards {
+  weight_kg: number | null;
+  intake_kcal: number;
+  bmr_kcal: number | null;
+  exercise_kcal: number;
+  steps: number;
+  body_fat_pct: number | null;
+  bmi: number | null;
+  lbm_kg: number | null;
+}
+
+export interface DashboardTop {
+  date: string;
+  balance: BalanceInfo;
+  cards: DashboardCards;
+  bmr_status: BmrStatus;
+  body_composition_source: BodyCompositionSource;
+}
+
+export interface HistoryPoint {
+  label: string;
+  start_date: string;
+  end_date: string;
+  value: number | null;
+}
+
+export interface DashboardHistory {
+  metric: HistoryMetric;
+  period: HistoryPeriod;
+  anchor_date: string;
+  points: HistoryPoint[];
 }
 
 export interface MacroTotals {
@@ -36,22 +91,6 @@ export interface MacroTotals {
   protein_g: number;
   fat_g: number;
   carbs_g: number;
-}
-
-export interface DashboardToday {
-  date: string;
-  targets: TargetMacros;
-  intake: MacroTotals;
-  burn: {
-    walk_kcal: number;
-    treadmill_kcal: number;
-    strength_kcal: number;
-    total_kcal: number;
-  };
-  remaining: MacroTotals;
-  steps: number;
-  weight_kg: number | null;
-  walk_sessions_today: number;
 }
 
 export interface FoodPreset {
@@ -99,29 +138,41 @@ export interface MealLogCreate {
   barcode?: string | null;
 }
 
+export interface WeightLog {
+  id: number;
+  weight_kg: number;
+  bmi: number | null;
+  lbm_kg: number | null;
+  body_fat_pct: number | null;
+  source: "manual" | "shortcuts";
+  logged_at: string;
+}
+
 export interface HealthSyncRequest {
   date: string;
-  steps: number;
+  steps?: number | null;
   weight_kg?: number | null;
+  bmi?: number | null;
+  lbm_kg?: number | null;
+  body_fat_pct?: number | null;
 }
 
-export interface WalkSession {
+export interface TreadmillLog {
   id: number;
-  walked_at: string;
-  discovery_note: string | null;
+  logged_at: string;
+  minutes: number;
+  speed_kmh: number | null;
+  incline_pct: number | null;
+  machine_kcal: number | null;
+  calculated_kcal: number;
 }
 
-export interface WeekSummary {
-  start_date: string;
-  end_date: string;
-  avg_intake_kcal: number;
-  avg_steps: number;
-  weight_trend: Array<{ date: string; weight_kg: number | null }>;
-  counts: {
-    walk_sessions: number;
-    treadmill_sessions: number;
-    strength_sessions: number;
-  };
+export interface StrengthLog {
+  id: number;
+  logged_at: string;
+  exercise_code: string;
+  minutes: number;
+  calculated_kcal: number;
 }
 
 export interface ApiError {

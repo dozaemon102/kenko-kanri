@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
-  title: Sanpo-ban API
-  version: 2.0.0
+  title: Kenko-kanri API
+  version: 3.0.0
   description: |
-    散歩判 API。v1-core + v2-barcode 詳細設計に基づく。
+    健康管理（kenko-kanri）API。v1-core + v2-barcode + v3-balance-ui 詳細設計に基づく。
     認証なし（LAN / Tailscale 内単一利用者）。全操作 ROLE-001。
+    v3 で廃止: /dashboard/today, /summary/week, /walks, /profile/recalculate-targets
 
 servers:
   - url: http://localhost:8080
@@ -17,16 +18,15 @@ tags:
   - name: foods
   - name: weights
   - name: sync
-  - name: walks
   - name: exercises
-  - name: summary
 
 paths:
   /api/v1/profile:
     get:
       tags: [profile]
       summary: Get user profile
-      x-requirements: [FR-001, FR-004]
+      x-usecase: v3-balance-ui
+      x-requirements: [FR-001, FR-004, FR-049]
       responses:
         "200":
           description: OK
@@ -39,7 +39,8 @@ paths:
     put:
       tags: [profile]
       summary: Create or update profile
-      x-requirements: [FR-001, FR-002, FR-003, FR-004]
+      x-usecase: v3-balance-ui
+      x-requirements: [FR-001, FR-004, FR-043, FR-049]
       requestBody:
         required: true
         content:
@@ -56,33 +57,12 @@ paths:
         "400":
           $ref: "#/components/responses/ValidationError"
 
-  /api/v1/profile/recalculate-targets:
-    post:
-      tags: [profile]
-      summary: Recalculate TDEE and PFC targets
-      x-requirements: [FR-002, FR-003]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                current_weight_kg:
-                  type: number
-                  format: float
-      responses:
-        "200":
-          description: Suggested targets
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TargetMacros"
-
-  /api/v1/dashboard/today:
+  /api/v1/dashboard/top:
     get:
       tags: [dashboard]
-      summary: Today dashboard
-      x-requirements: [FR-005, FR-006, FR-007, FR-008, FR-009]
+      summary: TOP dashboard with balance and 9 cards
+      x-usecase: v3-balance-ui
+      x-requirements: [FR-041, FR-044, FR-046, FR-047]
       parameters:
         - name: date
           in: query
@@ -95,7 +75,41 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DashboardToday"
+                $ref: "#/components/schemas/DashboardTop"
+        "409":
+          $ref: "#/components/responses/ProfileNotSetup"
+
+  /api/v1/dashboard/history/{metric}:
+    get:
+      tags: [dashboard]
+      summary: Card history by day/week/month/year
+      x-usecase: v3-balance-ui
+      x-requirements: [FR-045]
+      parameters:
+        - name: metric
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/HistoryMetric"
+        - name: period
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/HistoryPeriod"
+        - name: anchor_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardHistory"
+        "400":
+          $ref: "#/components/responses/ValidationError"
         "409":
           $ref: "#/components/responses/ProfileNotSetup"
 
@@ -304,6 +318,15 @@ paths:
                 weight_kg:
                   type: number
                   format: float
+                bmi:
+                  type: number
+                  nullable: true
+                lbm_kg:
+                  type: number
+                  nullable: true
+                body_fat_pct:
+                  type: number
+                  nullable: true
                 logged_at:
                   type: string
                   format: date-time
@@ -331,7 +354,7 @@ paths:
   /api/v1/sync/health:
     post:
       tags: [sync]
-      summary: Sync steps and optional weight from iPhone Shortcuts
+      summary: Sync steps and optional body composition from iPhone Shortcuts
       x-requirements: [FR-020, FR-021, FR-022, FR-023]
       requestBody:
         required: true
@@ -353,56 +376,8 @@ paths:
                     type: integer
                   weight_logged:
                     type: boolean
-
-  /api/v1/walks:
-    get:
-      tags: [walks]
-      summary: Walk session history
-      x-requirements: [FR-026]
-      parameters:
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 30
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/WalkSession"
-    post:
-      tags: [walks]
-      summary: Record walk session
-      x-requirements: [FR-024, FR-025]
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/WalkSessionCreate"
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WalkSession"
-
-  /api/v1/walks/{id}:
-    parameters:
-      - $ref: "#/components/parameters/IdPath"
-    delete:
-      tags: [walks]
-      summary: Delete walk session
-      x-requirements: [FR-036]
-      responses:
-        "204":
-          description: Deleted
-        "404":
-          $ref: "#/components/responses/NotFound"
+                  body_composition_logged:
+                    type: boolean
 
   /api/v1/exercises/treadmill:
     get:
@@ -521,25 +496,6 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/summary/week:
-    get:
-      tags: [summary]
-      summary: Weekly summary
-      x-requirements: [FR-033]
-      parameters:
-        - name: end_date
-          in: query
-          schema:
-            type: string
-            format: date
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WeekSummary"
-
 components:
   parameters:
     IdPath:
@@ -608,6 +564,8 @@ components:
                 - INTERNAL_ERROR
                 - BARCODE_NOT_FOUND
                 - OFF_UNAVAILABLE
+                - INVALID_METRIC
+                - INVALID_PERIOD
             message:
               type: string
 
@@ -615,20 +573,25 @@ components:
       type: string
       enum: [male, female]
 
-    TargetMacros:
-      type: object
-      properties:
-        kcal:
-          type: integer
-        protein_g:
-          type: number
-        fat_g:
-          type: number
-        carbs_g:
-          type: number
+    HistoryMetric:
+      type: string
+      enum: [balance, weight, intake, bmr, exercise, steps, body_fat_pct, bmi, lbm]
+
+    HistoryPeriod:
+      type: string
+      enum: [day, week, month, year]
+
+    BmrStatus:
+      type: string
+      enum: [ok, lbm_missing]
+
+    BodyCompositionSource:
+      type: string
+      enum: [today, latest, none]
 
     Profile:
       type: object
+      required: [height_cm, birth_date, sex, neat_kcal, tef_rate, initial_weight_kg, setup_completed]
       properties:
         height_cm:
           type: number
@@ -637,16 +600,16 @@ components:
           format: date
         sex:
           $ref: "#/components/schemas/Sex"
-        activity_factor:
-          type: number
-        target_kcal:
+        neat_kcal:
           type: integer
-        target_protein_g:
+          minimum: 0
+          maximum: 2000
+          default: 200
+        tef_rate:
           type: number
-        target_fat_g:
-          type: number
-        target_carbs_g:
-          type: number
+          minimum: 0
+          maximum: 0.5
+          default: 0.1
         initial_weight_kg:
           type: number
         setup_completed:
@@ -654,72 +617,132 @@ components:
 
     ProfileUpdate:
       type: object
-      required: [height_cm, birth_date, sex, activity_factor, current_weight_kg]
+      required: [height_cm, birth_date, sex, current_weight_kg]
       properties:
         height_cm:
           type: number
+          minimum: 100
+          maximum: 250
         birth_date:
           type: string
           format: date
         sex:
           $ref: "#/components/schemas/Sex"
-        activity_factor:
-          type: number
         current_weight_kg:
           type: number
-        target_kcal:
+          minimum: 30
+          maximum: 300
+        neat_kcal:
           type: integer
-        target_protein_g:
+          minimum: 0
+          maximum: 2000
+        tef_rate:
           type: number
-        target_fat_g:
-          type: number
-        target_carbs_g:
-          type: number
+          minimum: 0
+          maximum: 0.5
         setup_completed:
           type: boolean
 
-    MacroTotals:
+    BalanceBreakdown:
       type: object
       properties:
-        kcal:
+        intake_kcal:
           type: integer
-        protein_g:
-          type: number
-        fat_g:
-          type: number
-        carbs_g:
-          type: number
+        bmr_kcal:
+          type: integer
+          nullable: true
+        neat_kcal:
+          type: integer
+        exercise_kcal:
+          type: integer
+        tef_kcal:
+          type: integer
 
-    DashboardToday:
+    BalanceInfo:
       type: object
+      required: [computable, breakdown]
+      properties:
+        value:
+          type: integer
+          nullable: true
+          description: null when LBM missing (balance not computable)
+        computable:
+          type: boolean
+        breakdown:
+          $ref: "#/components/schemas/BalanceBreakdown"
+
+    DashboardCards:
+      type: object
+      properties:
+        weight_kg:
+          type: number
+          nullable: true
+        intake_kcal:
+          type: integer
+        bmr_kcal:
+          type: integer
+          nullable: true
+        exercise_kcal:
+          type: integer
+        steps:
+          type: integer
+        body_fat_pct:
+          type: number
+          nullable: true
+        bmi:
+          type: number
+          nullable: true
+        lbm_kg:
+          type: number
+          nullable: true
+
+    DashboardTop:
+      type: object
+      required: [date, balance, cards, bmr_status, body_composition_source]
       properties:
         date:
           type: string
           format: date
-        targets:
-          $ref: "#/components/schemas/TargetMacros"
-        intake:
-          $ref: "#/components/schemas/MacroTotals"
-        burn:
-          type: object
-          properties:
-            walk_kcal:
-              type: integer
-            treadmill_kcal:
-              type: integer
-            strength_kcal:
-              type: integer
-            total_kcal:
-              type: integer
-        remaining:
-          $ref: "#/components/schemas/MacroTotals"
-        steps:
-          type: integer
-        weight_kg:
+        balance:
+          $ref: "#/components/schemas/BalanceInfo"
+        cards:
+          $ref: "#/components/schemas/DashboardCards"
+        bmr_status:
+          $ref: "#/components/schemas/BmrStatus"
+        body_composition_source:
+          $ref: "#/components/schemas/BodyCompositionSource"
+
+    HistoryPoint:
+      type: object
+      required: [label, start_date, end_date]
+      properties:
+        label:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        value:
           type: number
           nullable: true
-        walk_sessions_today:
-          type: integer
+
+    DashboardHistory:
+      type: object
+      required: [metric, period, anchor_date, points]
+      properties:
+        metric:
+          $ref: "#/components/schemas/HistoryMetric"
+        period:
+          $ref: "#/components/schemas/HistoryPeriod"
+        anchor_date:
+          type: string
+          format: date
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryPoint"
 
     FoodPreset:
       type: object
@@ -844,6 +867,15 @@ components:
           type: integer
         weight_kg:
           type: number
+        bmi:
+          type: number
+          nullable: true
+        lbm_kg:
+          type: number
+          nullable: true
+        body_fat_pct:
+          type: number
+          nullable: true
         source:
           type: string
           enum: [manual, shortcuts]
@@ -853,7 +885,7 @@ components:
 
     HealthSyncRequest:
       type: object
-      required: [date, steps]
+      required: [date]
       properties:
         date:
           type: string
@@ -861,31 +893,19 @@ components:
         steps:
           type: integer
           minimum: 0
+          nullable: true
         weight_kg:
           type: number
           nullable: true
-
-    WalkSession:
-      type: object
-      properties:
-        id:
-          type: integer
-        walked_at:
-          type: string
-          format: date-time
-        discovery_note:
-          type: string
+        bmi:
+          type: number
           nullable: true
-
-    WalkSessionCreate:
-      type: object
-      properties:
-        walked_at:
-          type: string
-          format: date-time
-        discovery_note:
-          type: string
-          maxLength: 500
+        lbm_kg:
+          type: number
+          nullable: true
+        body_fat_pct:
+          type: number
+          nullable: true
 
     TreadmillLog:
       type: object
@@ -956,37 +976,3 @@ components:
           type: string
         minutes:
           type: integer
-
-    WeekSummary:
-      type: object
-      properties:
-        start_date:
-          type: string
-          format: date
-        end_date:
-          type: string
-          format: date
-        avg_intake_kcal:
-          type: number
-        avg_steps:
-          type: number
-        weight_trend:
-          type: array
-          items:
-            type: object
-            properties:
-              date:
-                type: string
-                format: date
-              weight_kg:
-                type: number
-                nullable: true
-        counts:
-          type: object
-          properties:
-            walk_sessions:
-              type: integer
-            treadmill_sessions:
-              type: integer
-            strength_sessions:
-              type: integer
