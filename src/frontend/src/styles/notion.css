@@ -75,6 +75,11 @@ body {
   padding: 16px;
   margin-bottom: 12px;
   box-shadow: var(--card-shadow);
+  min-width: 0;
+}
+
+#settings-form {
+  overflow: hidden;
 }
 
 .card.mint,
@@ -182,6 +187,7 @@ body {
 
 .field {
   margin-bottom: 14px;
+  min-width: 0;
 }
 
 .field label {
@@ -194,12 +200,30 @@ body {
 
 .field input,
 .field select {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 12px 14px;
   border: 1px solid var(--hairline);
   border-radius: 12px;
   font-size: 1rem;
   background: var(--surface);
+  box-sizing: border-box;
+}
+
+.field input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.field input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+.field input[type="date"]::-webkit-datetime-edit,
+.field input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  min-width: 0;
 }
 
 .field input:focus,
