@@ -2,6 +2,12 @@ import "./styles/notion.css";
 import { api } from "./api/client";
 import { openMealEntryFlow } from "./meal-entry-flow";
 import { mountHistoryChart } from "./history-chart";
+import {
+  addDaysIso,
+  formatMonthJa,
+  todayJstIso,
+  weekdayJa,
+} from "./dates";
 import type {
   DashboardTop,
   HistoryMetric,
@@ -18,7 +24,8 @@ const app = document.getElementById("app")!;
 let currentTab: Tab = "top";
 let historyView: { metric: HistoryMetric; label: string } | null = null;
 let historyPeriod: HistoryPeriod = "day";
-let selectedDate = new Date().toISOString().slice(0, 10);
+let jstAnchor = todayJstIso();
+let selectedDate = jstAnchor;
 
 const MEAL_SLOTS: { id: MealSlot; label: string; icon: string }[] = [
   {
@@ -124,33 +131,29 @@ function metricAccent(metric: HistoryMetric): string {
   return METRIC_ACCENT[card?.tone ?? "violet"] ?? METRIC_ACCENT.violet;
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatMonthJa(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
-  return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+function refreshJstMidnight(): boolean {
+  const today = todayJstIso();
+  if (today === jstAnchor) return false;
+  if (selectedDate === jstAnchor) {
+    selectedDate = today;
+  }
+  jstAnchor = today;
+  return true;
 }
 
 function formatStripDay(iso: string): { primary: string; secondary: string; isToday: boolean } {
-  const d = new Date(`${iso}T12:00:00`);
-  const dow = ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
-  const isToday = iso === todayIso();
+  const isToday = iso === todayJstIso();
   return {
-    primary: isToday ? "今日" : String(d.getDate()),
-    secondary: dow,
+    primary: isToday ? "今日" : String(Number(iso.split("-")[2])),
+    secondary: weekdayJa(iso),
     isToday,
   };
 }
 
 function buildDateStrip(anchor: string): string[] {
-  const base = new Date(`${anchor}T12:00:00`);
   const dates: string[] = [];
   for (let offset = -3; offset <= 3; offset += 1) {
-    const d = new Date(base);
-    d.setDate(d.getDate() + offset);
-    dates.push(d.toISOString().slice(0, 10));
+    dates.push(addDaysIso(anchor, offset));
   }
   return dates;
 }
@@ -175,7 +178,7 @@ function renderDateStrip(anchor: string, tab: "meals" | "exercise"): string {
 function bindDateStrip(tab: "meals" | "exercise", rerender: () => Promise<void>): void {
   document.querySelectorAll(`[data-date-tab="${tab}"]`).forEach((el) => {
     el.addEventListener("click", async () => {
-      selectedDate = (el as HTMLElement).dataset.date ?? todayIso();
+      selectedDate = (el as HTMLElement).dataset.date ?? todayJstIso();
       await rerender();
     });
   });
@@ -331,20 +334,22 @@ async function renderTop(): Promise<void> {
 
 async function renderHistory(): Promise<void> {
   if (!historyView) return;
-  const date = todayIso();
-  const hist = await api.getDashboardHistory(historyView.metric, historyPeriod, date);
-  const periods: HistoryPeriod[] = ["day", "week", "month", "year"];
-  const periodLabels: Record<HistoryPeriod, string> = {
-    day: "日",
-    week: "週",
-    month: "月",
-    year: "年",
-  };
-  const accent = metricAccent(historyView.metric);
+  const date = todayJstIso();
+  try {
+    const hist = await api.getDashboardHistory(historyView.metric, historyPeriod, date);
+    const periods: HistoryPeriod[] = ["day", "week", "month", "year"];
+    const periodLabels: Record<HistoryPeriod, string> = {
+      day: "日",
+      week: "週",
+      month: "月",
+      year: "年",
+    };
+    const accent = metricAccent(historyView.metric);
 
-  app.innerHTML = `
+    app.innerHTML = `
     <div class="page">
       <header class="page-header">
+        <button type="button" class="history-back" id="history-back">← 戻る</button>
         <h1 class="page-title">${historyView.label}</h1>
         <p class="page-subtitle">推移 · ${periodLabels[historyPeriod]}</p>
       </header>
@@ -363,23 +368,47 @@ async function renderHistory(): Promise<void> {
     ${renderTabs()}
   `;
 
-  bindTabs();
-  const chartEl = document.getElementById("history-chart");
-  if (chartEl) {
-    mountHistoryChart(chartEl, historyView.metric, hist.points, historyPeriod, accent);
-  }
-
-  document.querySelectorAll(".segment").forEach((el) => {
-    el.addEventListener("click", () => {
-      historyPeriod = (el as HTMLElement).dataset.period as HistoryPeriod;
-      renderHistory();
+    bindTabs();
+    document.getElementById("history-back")!.addEventListener("click", () => {
+      historyView = null;
+      void render();
     });
-  });
+
+    mountHistoryChart(
+      document.getElementById("history-chart")!,
+      historyView.metric,
+      hist.points,
+      historyPeriod,
+      accent
+    );
+
+    document.querySelectorAll(".segment").forEach((el) => {
+      el.addEventListener("click", () => {
+        historyPeriod = (el as HTMLElement).dataset.period as HistoryPeriod;
+        void renderHistory();
+      });
+    });
+  } catch (err) {
+    app.innerHTML = `
+      <div class="page">
+        <header class="page-header">
+          <button type="button" class="history-back" id="history-back">← 戻る</button>
+          <h1 class="page-title">${historyView.label}</h1>
+        </header>
+        <p class="error">${String(err)}</p>
+      </div>
+      ${renderTabs()}`;
+    bindTabs();
+    document.getElementById("history-back")!.addEventListener("click", () => {
+      historyView = null;
+      void render();
+    });
+  }
 }
 
 async function renderMeals(): Promise<void> {
   const date = selectedDate;
-  const meals = await api.getMeals(date);
+  const [meals, dashboard] = await Promise.all([api.getMeals(date), api.getDashboardTop(date)]);
   const totals = meals.reduce(
     (acc, m) => ({
       protein_g: acc.protein_g + m.protein_g,
@@ -434,6 +463,13 @@ async function renderMeals(): Promise<void> {
       </section>`;
   }).join("");
 
+  const balance = dashboard.balance;
+  const balanceText = balance.computable
+    ? `${Math.round(balance.value!)} kcal`
+    : "—（LBM 未同期）";
+  const balanceClass =
+    balance.computable && balance.value != null && balance.value < 0 ? " record-summary--deficit" : "";
+
   app.innerHTML = `
     <div class="page page--record">
       <header class="record-banner">
@@ -447,6 +483,10 @@ async function renderMeals(): Promise<void> {
         </div>
       </header>
       ${renderDateStrip(date, "meals")}
+      <div class="record-summary card${balanceClass}">
+        <div class="record-summary__label">カロリー収支</div>
+        <div class="record-summary__value">${balanceText}</div>
+      </div>
       <div class="record-summary card">
         <div class="record-summary__label">P / F / C 合計</div>
         <div class="record-summary__value">${totals.protein_g.toFixed(1)} <span class="muted">/ ${totals.fat_g.toFixed(1)} / ${totals.carbs_g.toFixed(1)} g</span></div>
@@ -666,6 +706,7 @@ async function renderSettings(existing: Profile | null, isSetup = false): Promis
 }
 
 async function render(): Promise<void> {
+  refreshJstMidnight();
   if (historyView) {
     await renderHistory();
     return;
@@ -683,3 +724,15 @@ async function render(): Promise<void> {
 }
 
 render();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && refreshJstMidnight()) {
+    void render();
+  }
+});
+
+window.setInterval(() => {
+  if (refreshJstMidnight()) {
+    void render();
+  }
+}, 60_000);

@@ -12,7 +12,7 @@ function shortLabel(label: string, period: HistoryPeriod): string {
     return `${Number(label.split("-")[1])}月`;
   }
   if (period === "year" && /^\d{4}$/.test(label)) {
-    return `${label}年`;
+    return `${label.slice(2)}年`;
   }
   return label;
 }
@@ -37,6 +37,13 @@ function formatHistoryValue(
   return `${Math.round(value)} kcal`;
 }
 
+function shouldShowXLabel(i: number, n: number, period: HistoryPeriod): boolean {
+  if (n <= 7) return true;
+  if (period === "day") return i % 2 === 0 || i === n - 1;
+  if (period === "week") return i % 2 === 0 || i === n - 1;
+  return i % 2 === 0 || i === n - 1;
+}
+
 type ChartPoint = {
   index: number;
   x: number;
@@ -48,7 +55,7 @@ type ChartPoint = {
   point: HistoryPoint;
 };
 
-export function mountHistoryChart(
+function renderChart(
   container: HTMLElement,
   metric: HistoryMetric,
   points: HistoryPoint[],
@@ -57,19 +64,20 @@ export function mountHistoryChart(
 ): void {
   const width = Math.max(container.clientWidth || 320, 280);
   const height = 240;
-  const pad = { top: 24, right: 12, bottom: 36, left: 44 };
+  const pad = { top: 24, right: 28, bottom: 40, left: 44 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   const n = Math.max(points.length, 1);
   const slot = plotW / n;
-  const barW = Math.min(slot * 0.52, 24);
+  const barW = Math.min(slot * 0.55, 22);
 
   const defined = points.filter((p) => p.value != null).map((p) => p.value as number);
   let yMin = defined.length ? Math.min(...defined) : 0;
   let yMax = defined.length ? Math.max(...defined) : 1;
   if (yMin === yMax) {
-    yMin -= Math.abs(yMin) * 0.15 + 1;
-    yMax += Math.abs(yMax) * 0.15 + 1;
+    const spread = Math.max(Math.abs(yMin) * 0.15, 1);
+    yMin -= spread;
+    yMax += spread;
   } else {
     const padY = (yMax - yMin) * 0.12;
     yMin -= padY;
@@ -81,34 +89,27 @@ export function mountHistoryChart(
 
   const hits: ChartPoint[] = [];
   const bars: string[] = [];
-  const linePts: string[] = [];
-  let prevXY: { x: number; y: number } | null = null;
 
   points.forEach((pt, i) => {
     const x = xAt(i);
     if (pt.value != null) {
       const y = yAt(pt.value);
-      const h = pad.top + plotH - y;
+      const h = Math.max(pad.top + plotH - y, 3);
+      const barY = pad.top + plotH - h;
       const bx = x - barW / 2;
       bars.push(
-        `<rect class="chart-bar" data-idx="${i}" x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="5" fill="${accent}" opacity="0.88"/>`
+        `<rect class="chart-bar" data-idx="${i}" x="${bx.toFixed(1)}" y="${barY.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="${accent}" opacity="0.88"/>`
       );
       hits.push({
         index: i,
         x,
-        y,
+        y: barY,
         barX: bx,
-        barY: y,
+        barY,
         barW,
         barH: h,
         point: pt,
       });
-      if (prevXY) {
-        linePts.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
-      } else {
-        linePts.push(`M ${x.toFixed(1)} ${y.toFixed(1)}`);
-      }
-      prevXY = { x, y };
     }
   });
 
@@ -124,15 +125,22 @@ export function mountHistoryChart(
     .map((v) => {
       const y = yAt(v);
       const text = Number.isInteger(v) ? String(Math.round(v)) : v.toFixed(1);
-      return `<text x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#9ca3af" font-size="10">${text}</text>`;
+      return `<text x="${pad.left - 6}" y="${(y + 4).toFixed(1)}" text-anchor="end" fill="#9ca3af" font-size="10">${text}</text>`;
     })
     .join("");
 
   const xLabels = points
     .map((pt, i) => {
-      if (n > 8 && i % 2 !== 0 && i !== n - 1) return "";
+      if (!shouldShowXLabel(i, n, period)) return "";
       const x = xAt(i);
-      return `<text x="${x.toFixed(1)}" y="${height - 10}" text-anchor="middle" fill="#9ca3af" font-size="10">${shortLabel(pt.label, period)}</text>`;
+      const anchor = i === n - 1 ? "end" : i === 0 ? "start" : "middle";
+      const clampedX =
+        i === n - 1
+          ? Math.min(x, width - pad.right)
+          : i === 0
+            ? Math.max(x, pad.left)
+            : x;
+      return `<text x="${clampedX.toFixed(1)}" y="${height - 8}" text-anchor="${anchor}" fill="#9ca3af" font-size="10">${shortLabel(pt.label, period)}</text>`;
     })
     .join("");
 
@@ -143,22 +151,16 @@ export function mountHistoryChart(
     )
     .join("");
 
-  const linePath =
-    linePts.length > 0
-      ? `<path d="${linePts.join(" ")}" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`
-      : "";
-
   const emptyHint =
     defined.length === 0
-      ? `<text x="${(width / 2).toFixed(1)}" y="${(height / 2).toFixed(1)}" text-anchor="middle" fill="#9ca3af" font-size="12">タップ可能なデータがありません</text>`
+      ? `<text x="${(width / 2).toFixed(1)}" y="${(height / 2).toFixed(1)}" text-anchor="middle" fill="#9ca3af" font-size="12">データがありません</text>`
       : "";
 
   container.innerHTML = `
     <div class="history-chart-wrap">
-      <svg class="history-chart-svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="推移グラフ">
+      <svg class="history-chart-svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="推移グラフ" overflow="visible">
         ${gridLines}
         ${bars.join("")}
-        ${linePath}
         ${hitAreas}
         ${yLabels}
         ${xLabels}
@@ -201,5 +203,19 @@ export function mountHistoryChart(
   svg.addEventListener("click", (ev) => {
     if ((ev.target as Element).classList.contains("chart-hit")) return;
     hideTip();
+  });
+}
+
+export function mountHistoryChart(
+  container: HTMLElement,
+  metric: HistoryMetric,
+  points: HistoryPoint[],
+  period: HistoryPeriod,
+  accent: string
+): void {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      renderChart(container, metric, points, period, accent);
+    });
   });
 }

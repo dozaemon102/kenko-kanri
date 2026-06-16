@@ -248,35 +248,35 @@ class _HistoryRangeCache:
             d = row.logged_at.astimezone(JST).date()
             self.strength_by_date[d] = self.strength_by_date.get(d, 0) + int(row.calculated_kcal)
 
-    def _exercise_kcal(self, on_date: date) -> float:
+    def _exercise_kcal(self, on_date: date) -> float | None:
         row = self.weight_by_date.get(on_date)
         weight = float(row.weight_kg) if row else float(self.profile.initial_weight_kg)
-        steps = self.steps_by_date.get(on_date)
+        steps = self.steps_by_date.get(on_date, 0)
         stride_cm, speed_kmh = resolve_walk_params(self.db, on_date)
-        walk, _ = walk_burn_kcal(
-            steps or 0,
-            weight,
-            stride_cm=stride_cm,
-            speed_kmh=speed_kmh,
-        ) if steps is not None else 0
+        walk, _ = walk_burn_kcal(steps, weight, stride_cm=stride_cm, speed_kmh=speed_kmh)
         treadmill = self.treadmill_by_date.get(on_date, 0)
         strength = self.strength_by_date.get(on_date, 0)
         total = walk + treadmill + strength
-        return float(total) if total > 0 or steps is not None else None
+        has_record = (
+            on_date in self.steps_by_date
+            or on_date in self.treadmill_by_date
+            or on_date in self.strength_by_date
+        )
+        if has_record or total > 0:
+            return float(total)
+        return None
 
     def day_metric(self, metric: HistoryMetric, on_date: date) -> float | None:
         if metric == "weight":
             row = self.weight_by_date.get(on_date)
             return float(row.weight_kg) if row else None
         if metric == "bmi":
-            row = self.weight_by_date.get(on_date)
-            return float(row.bmi) if row and row.bmi is not None else None
+            return resolve_body_field(self.db, on_date, "bmi")
         if metric == "lbm":
-            row = self.weight_by_date.get(on_date)
-            return float(row.lbm_kg) if row and row.lbm_kg is not None else None
+            val = resolve_body_field(self.db, on_date, "lbm_kg")
+            return val
         if metric == "body_fat_pct":
-            row = self.weight_by_date.get(on_date)
-            return float(row.body_fat_pct) if row and row.body_fat_pct is not None else None
+            return resolve_body_field(self.db, on_date, "body_fat_pct")
         if metric == "steps":
             return float(self.steps_by_date[on_date]) if on_date in self.steps_by_date else None
         if metric == "intake":
@@ -284,15 +284,14 @@ class _HistoryRangeCache:
         if metric == "exercise":
             return self._exercise_kcal(on_date)
         if metric == "bmr":
-            row = self.weight_by_date.get(on_date)
-            if row and row.lbm_kg is not None:
-                return float(katch_mcardle_bmr(float(row.lbm_kg)))
-            return None
-        if metric == "balance":
-            row = self.weight_by_date.get(on_date)
-            if not row or row.lbm_kg is None:
+            lbm_kg, _ = resolve_lbm_kg(self.db, on_date, self.profile)
+            if lbm_kg is None:
                 return None
-            lbm_kg = float(row.lbm_kg)
+            return float(katch_mcardle_bmr(lbm_kg))
+        if metric == "balance":
+            lbm_kg, _ = resolve_lbm_kg(self.db, on_date, self.profile)
+            if lbm_kg is None:
+                return None
             bmr_kcal = katch_mcardle_bmr(lbm_kg)
             intake_kcal = self.intake_by_date.get(on_date, 0)
             exercise = self._exercise_kcal(on_date) or 0

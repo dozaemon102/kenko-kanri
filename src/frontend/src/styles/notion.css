@@ -453,7 +453,27 @@ body {
 }
 
 .history-chart-card {
-  padding: 12px 8px 8px;
+  padding: 12px 4px 8px;
+  overflow: hidden;
+}
+
+.history-back {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--charcoal);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--card-shadow);
+}
+
+.record-summary--deficit .record-summary__value {
+  color: var(--success);
 }
 
 .history-chart-wrap {

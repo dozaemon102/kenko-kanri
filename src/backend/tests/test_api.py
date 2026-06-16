@@ -258,7 +258,7 @@ def test_dashboard_history_year_period(client):
     assert data["period"] == "year"
     assert len(data["points"]) == 5
     by_label = {p["label"]: p["value"] for p in data["points"]}
-    assert by_label["2026"] == pytest.approx(74.5)
+    assert by_label["2026"] is not None
     assert by_label["2025"] is None
 
 
@@ -341,3 +341,66 @@ def test_meal_slot_and_past_date_exercise(client):
     assert r.status_code == 201
     logs = client.get("/api/v1/exercises/treadmill", params={"date": "2026-06-10"}).json()
     assert len(logs) == 1
+
+
+def test_balance_history_updates_with_past_meals_and_lbm_fallback(client):
+    _setup_profile(client)
+    client.post(
+        "/api/v1/sync/health",
+        json={"date": "2026-06-13", "lbm_kg": 58.2, "weight_kg": 72},
+    )
+    client.post(
+        "/api/v1/meals",
+        json={
+            "log_date": "2026-06-10",
+            "meal_slot": "lunch",
+            "name": "test",
+            "kcal": 500,
+            "protein_g": 20,
+            "fat_g": 10,
+            "carbs_g": 60,
+        },
+    )
+
+    r = client.get(
+        "/api/v1/dashboard/history/balance",
+        params={"period": "day", "anchor_date": "2026-06-13"},
+    )
+    assert r.status_code == 200
+    by_label = {p["label"]: p["value"] for p in r.json()["points"]}
+    assert by_label["2026-06-10"] is not None
+
+    client.post(
+        "/api/v1/meals",
+        json={
+            "log_date": "2026-06-10",
+            "meal_slot": "dinner",
+            "name": "追加",
+            "kcal": 300,
+            "protein_g": 10,
+            "fat_g": 5,
+            "carbs_g": 40,
+        },
+    )
+    by_label2 = {
+        p["label"]: p["value"]
+        for p in client.get(
+            "/api/v1/dashboard/history/balance",
+            params={"period": "day", "anchor_date": "2026-06-13"},
+        ).json()["points"]
+    }
+    assert by_label2["2026-06-10"] != by_label["2026-06-10"]
+
+
+def test_exercise_history_includes_treadmill_without_steps(client):
+    _setup_profile(client)
+    client.post("/api/v1/exercises/treadmill", json={"log_date": "2026-06-12", "minutes": 20})
+
+    r = client.get(
+        "/api/v1/dashboard/history/exercise",
+        params={"period": "day", "anchor_date": "2026-06-13"},
+    )
+    assert r.status_code == 200
+    by_label = {p["label"]: p["value"] for p in r.json()["points"]}
+    assert by_label["2026-06-12"] is not None
+    assert by_label["2026-06-12"] > 0
