@@ -19,3 +19,14 @@ def logged_at_for_log_date(log_date: date) -> datetime:
     if log_date == today_jst():
         return now_jst()
     return datetime.combine(log_date, time(12, 0), tzinfo=JST)
+
+
+def as_jst(dt: datetime) -> datetime:
+    """Normalize DB datetimes to JST (naive values are treated as JST wall time)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=JST)
+    return dt.astimezone(JST)
+
+
+def log_date_jst(dt: datetime) -> date:
+    return as_jst(dt).date()

@@ -72,18 +72,20 @@ class WeightLog(Base):
     __tablename__ = "weight_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    log_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
     weight_kg: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     bmi: Mapped[Decimal | None] = mapped_column(Numeric(4, 1), nullable=True)
     lbm_kg: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     body_fat_pct: Mapped[Decimal | None] = mapped_column(Numeric(4, 1), nullable=True)
     source: Mapped[str] = mapped_column(Enum("manual", "shortcuts", name="weight_source_enum"), nullable=False)
-    logged_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    logged_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
 class TreadmillLog(Base):
     __tablename__ = "treadmill_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    log_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     logged_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     speed_kmh: Mapped[Decimal | None] = mapped_column(Numeric(4, 1), nullable=True)
@@ -96,6 +98,7 @@ class StrengthLog(Base):
     __tablename__ = "strength_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    log_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     logged_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     exercise_code: Mapped[str] = mapped_column(String(20), nullable=False)
     minutes: Mapped[int] = mapped_column(Integer, nullable=False)

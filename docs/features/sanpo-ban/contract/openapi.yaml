@@ -315,6 +315,10 @@ paths:
               type: object
               required: [weight_kg]
               properties:
+                log_date:
+                  type: string
+                  format: date
+                  description: JST calendar day (defaults to today)
                 weight_kg:
                   type: number
                   format: float
@@ -882,6 +886,10 @@ components:
       properties:
         id:
           type: integer
+        log_date:
+          type: string
+          format: date
+          description: JST calendar day (unique key)
         weight_kg:
           type: number
         bmi:

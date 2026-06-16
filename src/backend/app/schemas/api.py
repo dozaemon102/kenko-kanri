@@ -148,6 +148,7 @@ class MealDuplicate(BaseModel):
 
 
 class WeightCreate(BaseModel):
+    log_date: date | None = None
     weight_kg: float = Field(ge=30, le=300)
     bmi: float | None = Field(default=None, ge=10, le=80)
     lbm_kg: float | None = Field(default=None, ge=20, le=200)
@@ -157,6 +158,7 @@ class WeightCreate(BaseModel):
 
 class WeightResponse(BaseModel):
     id: int
+    log_date: date
     weight_kg: float
     bmi: float | None = None
     lbm_kg: float | None = None

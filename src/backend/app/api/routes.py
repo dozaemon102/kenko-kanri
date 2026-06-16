@@ -1,4 +1,4 @@
-from datetime import date as date_cls, datetime, time, timedelta
+from datetime import date as date_cls, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Response
@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import not_found, validation_error
-from app.core.timezone import logged_at_for_log_date, now_jst, today_jst
+from app.core.timezone import log_date_jst, logged_at_for_log_date, now_jst, today_jst
 from app.database import get_db
 from app.models.entities import (
     DailySteps,
@@ -38,19 +38,19 @@ from app.schemas.api import (
     WeightResponse,
 )
 from app.services.calculations import STRENGTH_TEMPLATES, strength_burn_kcal, treadmill_burn_kcal
-from app.services.dashboard_service import build_dashboard_top, build_history, get_profile
+from app.services.dashboard_service import (
+    build_dashboard_top,
+    build_history,
+    get_profile,
+    latest_weight_kg,
+)
 from app.services.open_food_facts import lookup_barcode
-from app.services.weight_log_factory import create_weight_log
+from app.services.weight_log_service import upsert_weight_day
 
 router = APIRouter(prefix="/api/v1")
 
 DEFAULT_NEAT = 180
 DEFAULT_TEF = Decimal("0.100")
-
-
-def _day_bounds(on_date: date_cls) -> tuple[datetime, datetime]:
-    start = datetime.combine(on_date, time.min, tzinfo=now_jst().tzinfo)
-    return start, start + timedelta(days=1)
 
 
 def _profile_response(p: UserProfile) -> ProfileResponse:
@@ -101,12 +101,11 @@ def put_profile(body: ProfileUpdate, db: Session = Depends(get_db)) -> ProfileRe
     profile.setup_completed = body.setup_completed
     profile.updated_at = now
 
-    db.add(
-        WeightLog(
-            weight_kg=Decimal(str(body.current_weight_kg)),
-            source="manual",
-            logged_at=now,
-        )
+    upsert_weight_day(
+        db,
+        today_jst(),
+        "manual",
+        weight_kg=float(body.current_weight_kg),
     )
     db.commit()
     db.refresh(profile)
@@ -225,20 +224,28 @@ def duplicate_meal(meal_id: int, body: MealDuplicate, db: Session = Depends(get_
 
 @router.get("/weights", response_model=list[WeightResponse])
 def list_weights(limit: int = 30, db: Session = Depends(get_db)) -> list[WeightLog]:
-    return list(db.scalars(select(WeightLog).order_by(WeightLog.logged_at.desc()).limit(limit)))
+    return list(db.scalars(select(WeightLog).order_by(WeightLog.log_date.desc()).limit(limit)))
 
 
 @router.post("/weights", response_model=WeightResponse, status_code=201)
 def create_weight(body: WeightCreate, db: Session = Depends(get_db)) -> WeightLog:
-    row = create_weight_log(
+    if body.log_date is not None:
+        log_date = body.log_date
+    elif body.logged_at is not None:
+        log_date = log_date_jst(body.logged_at)
+    else:
+        log_date = today_jst()
+    profile = get_profile(db)
+    row = upsert_weight_day(
+        db,
+        log_date,
+        "manual",
         weight_kg=body.weight_kg,
         bmi=body.bmi,
         lbm_kg=body.lbm_kg,
         body_fat_pct=body.body_fat_pct,
-        source="manual",
-        logged_at=body.logged_at or now_jst(),
+        default_weight_kg=float(profile.initial_weight_kg),
     )
-    db.add(row)
     db.commit()
     db.refresh(row)
     return row
@@ -295,34 +302,22 @@ def sync_health(body: HealthSyncRequest, db: Session = Depends(get_db)) -> dict:
 
     weight_logged = False
     body_composition_logged = False
-    if body.weight_kg is not None:
-        day_start = datetime.combine(body.date, time.min, tzinfo=now.tzinfo)
-        day_end = day_start + timedelta(days=1)
-        for row in db.scalars(
-            select(WeightLog).where(
-                WeightLog.logged_at >= day_start,
-                WeightLog.logged_at < day_end,
-                WeightLog.source == "shortcuts",
-            )
-        ).all():
-            db.delete(row)
-
-        log_at = (
-            now
-            if body.date == today_jst()
-            else datetime.combine(body.date, time(12, 0), tzinfo=now.tzinfo)
+    has_body_metric = any(
+        v is not None for v in (body.weight_kg, body.bmi, body.lbm_kg, body.body_fat_pct)
+    )
+    if has_body_metric:
+        profile = get_profile(db)
+        upsert_weight_day(
+            db,
+            body.date,
+            "shortcuts",
+            weight_kg=body.weight_kg,
+            bmi=body.bmi,
+            lbm_kg=body.lbm_kg,
+            body_fat_pct=body.body_fat_pct,
+            default_weight_kg=latest_weight_kg(db, body.date, profile),
         )
-        db.add(
-            create_weight_log(
-                weight_kg=body.weight_kg,
-                bmi=body.bmi,
-                lbm_kg=body.lbm_kg,
-                body_fat_pct=body.body_fat_pct,
-                source="shortcuts",
-                logged_at=log_at,
-            )
-        )
-        weight_logged = True
+        weight_logged = body.weight_kg is not None
         body_composition_logged = any(
             v is not None for v in (body.bmi, body.lbm_kg, body.body_fat_pct)
         )
@@ -348,11 +343,10 @@ def sync_health(body: HealthSyncRequest, db: Session = Depends(get_db)) -> dict:
 @router.get("/exercises/treadmill", response_model=list[TreadmillResponse])
 def list_treadmill(date: str | None = None, db: Session = Depends(get_db)) -> list[TreadmillLog]:
     on_date = date_cls.fromisoformat(date) if date else today_jst()
-    start, end = _day_bounds(on_date)
     return list(
         db.scalars(
             select(TreadmillLog)
-            .where(TreadmillLog.logged_at >= start, TreadmillLog.logged_at < end)
+            .where(TreadmillLog.log_date == on_date)
             .order_by(TreadmillLog.logged_at.desc())
         )
     )
@@ -365,6 +359,7 @@ def create_treadmill(body: TreadmillCreate, db: Session = Depends(get_db)) -> Tr
     calc = treadmill_burn_kcal(body.minutes, weight, body.speed_kmh, body.machine_kcal)
     log_date = body.log_date or today_jst()
     row = TreadmillLog(
+        log_date=log_date,
         logged_at=logged_at_for_log_date(log_date),
         minutes=body.minutes,
         speed_kmh=Decimal(str(body.speed_kmh)) if body.speed_kmh is not None else None,
@@ -396,11 +391,10 @@ def strength_templates() -> list[StrengthTemplate]:
 @router.get("/exercises/strength", response_model=list[StrengthResponse])
 def list_strength(date: str | None = None, db: Session = Depends(get_db)) -> list[StrengthLog]:
     on_date = date_cls.fromisoformat(date) if date else today_jst()
-    start, end = _day_bounds(on_date)
     return list(
         db.scalars(
             select(StrengthLog)
-            .where(StrengthLog.logged_at >= start, StrengthLog.logged_at < end)
+            .where(StrengthLog.log_date == on_date)
             .order_by(StrengthLog.logged_at.desc())
         )
     )
@@ -414,6 +408,7 @@ def create_strength(body: StrengthCreate, db: Session = Depends(get_db)) -> Stre
     calc = strength_burn_kcal(body.exercise_code, body.minutes, float(profile.initial_weight_kg))
     log_date = body.log_date or today_jst()
     row = StrengthLog(
+        log_date=log_date,
         logged_at=logged_at_for_log_date(log_date),
         exercise_code=body.exercise_code,
         minutes=body.minutes,

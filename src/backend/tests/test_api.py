@@ -95,6 +95,33 @@ def test_balance_with_lbm(client):
     assert dash["balance"]["value"] == expected
 
 
+def test_health_sync_body_composition_without_weight(client):
+    _setup_profile(client)
+    r = client.post(
+        "/api/v1/sync/health",
+        json={
+            "date": "2026-06-15",
+            "lbm_kg": 59.2,
+            "bmi": 26.6,
+            "body_fat_pct": 20.1,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["weight_logged"] is False
+    assert data["body_composition_logged"] is True
+
+    by_label = {
+        p["label"]: p["value"]
+        for p in client.get(
+            "/api/v1/dashboard/history/lbm",
+            params={"period": "day", "anchor_date": "2026-06-16"},
+        ).json()["points"]
+    }
+    assert by_label["2026-06-15"] == pytest.approx(59.2)
+    assert by_label["2026-06-16"] is None
+
+
 def test_health_sync_body_composition(client):
     _setup_profile(client)
     r = client.post(
@@ -439,6 +466,70 @@ def test_balance_history_null_without_activity_on_past_days(client):
     assert by_label["2026-06-15"] is None
 
 
+def test_weight_log_date_upsert_partial_fields(client):
+    """同日 upsert: 後から体重だけ送っても体組成は残る。"""
+    _setup_profile(client)
+    client.post(
+        "/api/v1/sync/health",
+        json={
+            "date": "2026-06-15",
+            "weight_kg": 74.05,
+            "lbm_kg": 59.17,
+            "bmi": 26.6,
+            "body_fat_pct": 20.1,
+        },
+    )
+    client.post("/api/v1/weights", json={"weight_kg": 75, "log_date": "2026-06-15"})
+
+    weights = client.get("/api/v1/weights").json()
+    row = next(w for w in weights if w["log_date"] == "2026-06-15")
+    assert row["weight_kg"] == pytest.approx(75.0)
+    assert row["lbm_kg"] == pytest.approx(59.17)
+    assert row["bmi"] == pytest.approx(26.6)
+
+    by_label = {
+        p["label"]: p["value"]
+        for p in client.get(
+            "/api/v1/dashboard/history/lbm",
+            params={"period": "day", "anchor_date": "2026-06-16"},
+        ).json()["points"]
+    }
+    assert by_label["2026-06-15"] == pytest.approx(59.17)
+
+
+def test_lbm_history_with_manual_weight_same_day(client):
+    """Health shortcuts の体組成が、同日の後から入った manual 体重より優先される。"""
+    _setup_profile(client)
+    client.post(
+        "/api/v1/sync/health",
+        json={
+            "date": "2026-06-15",
+            "weight_kg": 74.05,
+            "lbm_kg": 59.17,
+            "bmi": 26.6,
+            "body_fat_pct": 20.1,
+        },
+    )
+    client.post(
+        "/api/v1/weights",
+        json={"weight_kg": 75, "log_date": "2026-06-15"},
+    )
+
+    r = client.get(
+        "/api/v1/dashboard/history/lbm",
+        params={"period": "day", "anchor_date": "2026-06-16"},
+    )
+    by_label = {p["label"]: p["value"] for p in r.json()["points"]}
+    assert by_label["2026-06-15"] == pytest.approx(59.17)
+
+    weight_hist = client.get(
+        "/api/v1/dashboard/history/weight",
+        params={"period": "day", "anchor_date": "2026-06-16"},
+    ).json()["points"]
+    weight_by_label = {p["label"]: p["value"] for p in weight_hist}
+    assert weight_by_label["2026-06-15"] == pytest.approx(75.0)
+
+
 def test_lbm_history_shows_measurement_day(client):
     _setup_profile(client)
     client.post(
@@ -487,3 +578,35 @@ def test_exercise_history_includes_treadmill_without_steps(client):
     by_label = {p["label"]: p["value"] for p in r.json()["points"]}
     assert by_label["2026-06-12"] is not None
     assert by_label["2026-06-12"] > 0
+
+
+def test_strength_logs_filter_and_sum_by_log_date(client):
+    """同日の複数部位は log_date で集計・一覧される。"""
+    _setup_profile(client)
+    client.post(
+        "/api/v1/exercises/strength",
+        json={"log_date": "2026-06-14", "exercise_code": "chest", "minutes": 10},
+    )
+    client.post(
+        "/api/v1/exercises/strength",
+        json={"log_date": "2026-06-14", "exercise_code": "legs", "minutes": 15},
+    )
+    client.post(
+        "/api/v1/exercises/strength",
+        json={"log_date": "2026-06-13", "exercise_code": "back", "minutes": 20},
+    )
+
+    listed = client.get("/api/v1/exercises/strength", params={"date": "2026-06-14"}).json()
+    assert len(listed) == 2
+    assert all(row["log_date"] == "2026-06-14" for row in listed)
+
+    top = client.get("/api/v1/dashboard/top", params={"date": "2026-06-14"}).json()
+    assert top["cards"]["exercise_kcal"] == sum(row["calculated_kcal"] for row in listed)
+
+    hist = client.get(
+        "/api/v1/dashboard/history/exercise",
+        params={"period": "day", "anchor_date": "2026-06-15"},
+    ).json()["points"]
+    by_label = {p["label"]: p["value"] for p in hist}
+    assert by_label["2026-06-14"] is not None
+    assert by_label["2026-06-13"] is not None

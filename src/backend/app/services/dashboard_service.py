@@ -1,11 +1,11 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 from typing import Literal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import not_found, profile_not_setup, validation_error
-from app.core.timezone import JST, today_jst
+from app.core.timezone import today_jst
 from app.models.entities import (
     DailySteps,
     MealLog,
@@ -52,35 +52,26 @@ def require_setup(profile: UserProfile) -> None:
 
 
 def latest_weight_entry(db: Session, on_date: date, profile: UserProfile) -> WeightLog | None:
-    day_start = datetime.combine(on_date, time.min, tzinfo=JST)
-    day_end = day_start + timedelta(days=1)
-    row = db.scalar(
-        select(WeightLog)
-        .where(WeightLog.logged_at >= day_start, WeightLog.logged_at < day_end)
-        .order_by(WeightLog.logged_at.desc())
-        .limit(1)
-    )
+    row = db.scalar(select(WeightLog).where(WeightLog.log_date == on_date))
     if row:
         return row
-    return db.scalar(select(WeightLog).order_by(WeightLog.logged_at.desc()).limit(1))
+    return db.scalar(
+        select(WeightLog)
+        .where(WeightLog.log_date <= on_date)
+        .order_by(WeightLog.log_date.desc())
+        .limit(1)
+    )
 
 
 def resolve_lbm_kg(db: Session, on_date: date, profile: UserProfile) -> tuple[float | None, BodyCompositionSource]:
-    day_start = datetime.combine(on_date, time.min, tzinfo=JST)
-    day_end = day_start + timedelta(days=1)
-    today_row = db.scalar(
-        select(WeightLog)
-        .where(WeightLog.logged_at >= day_start, WeightLog.logged_at < day_end)
-        .order_by(WeightLog.logged_at.desc())
-        .limit(1)
-    )
+    today_row = db.scalar(select(WeightLog).where(WeightLog.log_date == on_date))
     if today_row and today_row.lbm_kg is not None:
         return float(today_row.lbm_kg), "today"
 
     latest = db.scalar(
         select(WeightLog)
         .where(WeightLog.lbm_kg.isnot(None))
-        .order_by(WeightLog.logged_at.desc())
+        .order_by(WeightLog.log_date.desc())
         .limit(1)
     )
     if latest and latest.lbm_kg is not None:
@@ -93,22 +84,15 @@ def resolve_body_field(
     on_date: date,
     field: Literal["bmi", "lbm_kg", "body_fat_pct"],
 ) -> float | None:
-    day_start = datetime.combine(on_date, time.min, tzinfo=JST)
-    day_end = day_start + timedelta(days=1)
     col = getattr(WeightLog, field)
-    today_row = db.scalar(
-        select(WeightLog)
-        .where(WeightLog.logged_at >= day_start, WeightLog.logged_at < day_end)
-        .order_by(WeightLog.logged_at.desc())
-        .limit(1)
-    )
+    today_row = db.scalar(select(WeightLog).where(WeightLog.log_date == on_date))
     if today_row:
         val = getattr(today_row, field)
         if val is not None:
             return float(val)
 
     latest = db.scalar(
-        select(WeightLog).where(col.isnot(None)).order_by(WeightLog.logged_at.desc()).limit(1)
+        select(WeightLog).where(col.isnot(None)).order_by(WeightLog.log_date.desc()).limit(1)
     )
     if latest:
         val = getattr(latest, field)
@@ -158,19 +142,14 @@ def burn_for_date(db: Session, on_date: date, weight_kg: float, profile: UserPro
     stride_cm, speed_kmh = resolve_walk_params(db, on_date)
     walk, _ = walk_burn_kcal(steps, weight_kg, stride_cm=stride_cm, speed_kmh=speed_kmh)
 
-    day_start = datetime.combine(on_date, time.min, tzinfo=JST)
-    day_end = day_start + timedelta(days=1)
-
     treadmill = db.scalar(
         select(func.coalesce(func.sum(TreadmillLog.calculated_kcal), 0)).where(
-            TreadmillLog.logged_at >= day_start,
-            TreadmillLog.logged_at < day_end,
+            TreadmillLog.log_date == on_date,
         )
     )
     strength = db.scalar(
         select(func.coalesce(func.sum(StrengthLog.calculated_kcal), 0)).where(
-            StrengthLog.logged_at >= day_start,
-            StrengthLog.logged_at < day_end,
+            StrengthLog.log_date == on_date,
         )
     )
     treadmill_i = int(treadmill or 0)
@@ -194,19 +173,12 @@ class _HistoryRangeCache:
     def __init__(self, db: Session, profile: UserProfile, start: date, end: date) -> None:
         self.db = db
         self.profile = profile
-        range_start = datetime.combine(start, time.min, tzinfo=JST)
-        range_end = datetime.combine(end + timedelta(days=1), time.min, tzinfo=JST)
-
         logs = db.scalars(
             select(WeightLog)
-            .where(WeightLog.logged_at >= range_start, WeightLog.logged_at < range_end)
-            .order_by(WeightLog.logged_at.desc())
+            .where(WeightLog.log_date >= start, WeightLog.log_date <= end)
+            .order_by(WeightLog.log_date.desc())
         ).all()
-        self.weight_by_date: dict[date, WeightLog] = {}
-        for log in logs:
-            d = log.logged_at.astimezone(JST).date()
-            if d not in self.weight_by_date:
-                self.weight_by_date[d] = log
+        self.weight_by_date: dict[date, WeightLog] = {log.log_date: log for log in logs}
 
         steps_rows = db.scalars(
             select(DailySteps).where(
@@ -226,7 +198,7 @@ class _HistoryRangeCache:
         latest_lbm_row = db.scalar(
             select(WeightLog)
             .where(WeightLog.lbm_kg.isnot(None))
-            .order_by(WeightLog.logged_at.desc())
+            .order_by(WeightLog.log_date.desc())
             .limit(1)
         )
         self.fallback_lbm_kg: float | None = (
@@ -245,25 +217,25 @@ class _HistoryRangeCache:
             if int(row[1]) > 0
         }
 
-        self.treadmill_by_date: dict[date, int] = {}
-        for row in db.scalars(
-            select(TreadmillLog).where(
-                TreadmillLog.logged_at >= range_start,
-                TreadmillLog.logged_at < range_end,
-            )
-        ).all():
-            d = row.logged_at.astimezone(JST).date()
-            self.treadmill_by_date[d] = self.treadmill_by_date.get(d, 0) + int(row.calculated_kcal)
+        self.treadmill_by_date: dict[date, int] = {
+            row[0]: int(row[1])
+            for row in db.execute(
+                select(TreadmillLog.log_date, func.coalesce(func.sum(TreadmillLog.calculated_kcal), 0))
+                .where(TreadmillLog.log_date >= start, TreadmillLog.log_date <= end)
+                .group_by(TreadmillLog.log_date)
+            ).all()
+            if int(row[1]) > 0
+        }
 
-        self.strength_by_date: dict[date, int] = {}
-        for row in db.scalars(
-            select(StrengthLog).where(
-                StrengthLog.logged_at >= range_start,
-                StrengthLog.logged_at < range_end,
-            )
-        ).all():
-            d = row.logged_at.astimezone(JST).date()
-            self.strength_by_date[d] = self.strength_by_date.get(d, 0) + int(row.calculated_kcal)
+        self.strength_by_date: dict[date, int] = {
+            row[0]: int(row[1])
+            for row in db.execute(
+                select(StrengthLog.log_date, func.coalesce(func.sum(StrengthLog.calculated_kcal), 0))
+                .where(StrengthLog.log_date >= start, StrengthLog.log_date <= end)
+                .group_by(StrengthLog.log_date)
+            ).all()
+            if int(row[1]) > 0
+        }
 
     def _weight_field(self, on_date: date, field: str) -> float | None:
         row = self.weight_by_date.get(on_date)
