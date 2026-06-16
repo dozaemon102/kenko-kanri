@@ -37,11 +37,21 @@ function formatHistoryValue(
   return `${Math.round(value)} kcal`;
 }
 
+function xLabelIndices(n: number, period: HistoryPeriod): number[] {
+  if (n <= 7) return Array.from({ length: n }, (_, i) => i);
+  const maxLabels = period === "year" ? 5 : 6;
+  const step = Math.max(1, Math.ceil((n - 1) / (maxLabels - 1)));
+  const indices = new Set<number>([0, n - 1]);
+  for (let i = step; i < n - 1; i += step) indices.add(i);
+  const sorted = [...indices].sort((a, b) => a - b);
+  if (sorted.length >= 2 && sorted[sorted.length - 1]! - sorted[sorted.length - 2]! <= 1) {
+    sorted.splice(sorted.length - 2, 1);
+  }
+  return sorted;
+}
+
 function shouldShowXLabel(i: number, n: number, period: HistoryPeriod): boolean {
-  if (n <= 7) return true;
-  if (period === "day") return i % 2 === 0 || i === n - 1;
-  if (period === "week") return i % 2 === 0 || i === n - 1;
-  return i % 2 === 0 || i === n - 1;
+  return xLabelIndices(n, period).includes(i);
 }
 
 type ChartPoint = {
@@ -73,20 +83,30 @@ function renderChart(
 
   const defined = points.filter((p) => p.value != null).map((p) => p.value as number);
   const signedMetric = metric === "balance";
-  let yMin = defined.length ? Math.min(...defined) : 0;
-  let yMax = defined.length ? Math.max(...defined) : 1;
-  if (signedMetric) {
-    yMin = Math.min(yMin, 0);
-    yMax = Math.max(yMax, 0);
+  let dataMin = defined.length ? Math.min(...defined) : 0;
+  let dataMax = defined.length ? Math.max(...defined) : 0;
+  let yMin = signedMetric ? Math.min(dataMin, 0) : dataMin;
+  let yMax = signedMetric ? Math.max(dataMax, 0) : dataMax;
+  if (!defined.length) {
+    yMin = 0;
+    yMax = signedMetric ? 0 : 1;
   }
   if (yMin === yMax) {
     const spread = Math.max(Math.abs(yMin) * 0.15, 1);
     yMin -= spread;
     yMax += spread;
   } else {
-    const padY = (yMax - yMin) * 0.12;
-    yMin -= padY;
-    yMax += padY;
+    const span = yMax - yMin;
+    const padY = span * 0.12;
+    if (signedMetric) {
+      if (yMax > 0) yMax += padY;
+      else yMax = padY * 0.25;
+      if (yMin < 0) yMin -= padY;
+      else yMin = -padY * 0.25;
+    } else {
+      yMin -= padY;
+      yMax += padY;
+    }
   }
 
   const xAt = (i: number) => pad.left + slot * i + slot / 2;

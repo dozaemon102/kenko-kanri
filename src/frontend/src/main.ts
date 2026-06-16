@@ -27,6 +27,7 @@ let historyView: { metric: HistoryMetric; label: string } | null = null;
 let historyPeriod: HistoryPeriod = "day";
 const historyCache = new Map<string, DashboardHistory>();
 let historyCacheAnchor = "";
+let historyCacheMetric: HistoryMetric | null = null;
 let jstAnchor = todayJstIso();
 let selectedDate = jstAnchor;
 
@@ -136,12 +137,20 @@ function historyCacheKey(metric: HistoryMetric, period: HistoryPeriod): string {
 function clearHistoryCache(): void {
   historyCache.clear();
   historyCacheAnchor = "";
+  historyCacheMetric = null;
 }
 
 async function prefetchHistory(metric: HistoryMetric, anchorDate: string): Promise<void> {
-  if (historyCacheAnchor === anchorDate && historyCache.size >= 4) return;
+  if (
+    historyCacheAnchor === anchorDate &&
+    historyCacheMetric === metric &&
+    historyCache.size >= 4
+  ) {
+    return;
+  }
   clearHistoryCache();
   historyCacheAnchor = anchorDate;
+  historyCacheMetric = metric;
   const periods: HistoryPeriod[] = ["day", "week", "month", "year"];
   const results = await Promise.all(
     periods.map((period) => api.getDashboardHistory(metric, period, anchorDate))
@@ -394,6 +403,7 @@ async function renderTop(): Promise<void> {
   bindTabs();
   document.querySelectorAll(".metric-card").forEach((el) => {
     el.addEventListener("click", () => {
+      clearHistoryCache();
       historyView = {
         metric: (el as HTMLElement).dataset.metric as HistoryMetric,
         label: (el as HTMLElement).dataset.label ?? "",
@@ -453,7 +463,8 @@ async function renderHistory(): Promise<void> {
 
   try {
     await prefetchHistory(historyView.metric, date);
-    paintHistoryChart(historyCache.get(historyCacheKey(historyView.metric, historyPeriod))!);
+    const hist = historyCache.get(historyCacheKey(historyView.metric, historyPeriod));
+    if (hist) paintHistoryChart(hist);
   } catch (err) {
     app.innerHTML = `
       <div class="page">

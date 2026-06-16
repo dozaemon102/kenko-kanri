@@ -421,6 +421,42 @@ def test_balance_history_null_without_activity(client):
     assert by_label["2026-06-15"] is not None
 
 
+def test_balance_history_null_without_activity_on_past_days(client):
+    _setup_profile(client)
+    client.post(
+        "/api/v1/sync/health",
+        json={"date": "2026-06-13", "lbm_kg": 58.2, "weight_kg": 72},
+    )
+
+    r = client.get(
+        "/api/v1/dashboard/history/balance",
+        params={"period": "day", "anchor_date": "2026-06-15"},
+    )
+    assert r.status_code == 200
+    by_label = {p["label"]: p["value"] for p in r.json()["points"]}
+    assert by_label["2026-06-13"] is not None
+    assert by_label["2026-06-14"] is None
+    assert by_label["2026-06-15"] is None
+
+
+def test_lbm_history_shows_measurement_day(client):
+    _setup_profile(client)
+    client.post(
+        "/api/v1/sync/health",
+        json={"date": "2026-06-15", "lbm_kg": 59.2, "weight_kg": 75, "bmi": 26.6},
+    )
+
+    r = client.get(
+        "/api/v1/dashboard/history/lbm",
+        params={"period": "day", "anchor_date": "2026-06-16"},
+    )
+    assert r.status_code == 200
+    by_label = {p["label"]: p["value"] for p in r.json()["points"]}
+    assert by_label["2026-06-14"] is None
+    assert by_label["2026-06-15"] == pytest.approx(59.2)
+    assert by_label["2026-06-16"] is None
+
+
 def test_bmr_history_no_lbm_carry_forward(client):
     _setup_profile(client)
     client.post(
@@ -436,6 +472,7 @@ def test_bmr_history_no_lbm_carry_forward(client):
     by_label = {p["label"]: p["value"] for p in r.json()["points"]}
     assert by_label["2026-06-13"] is not None
     assert by_label["2026-06-14"] is None
+    assert by_label["2026-06-15"] is None
 
 
 def test_exercise_history_includes_treadmill_without_steps(client):
