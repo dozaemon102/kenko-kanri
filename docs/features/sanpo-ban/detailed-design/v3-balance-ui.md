@@ -125,8 +125,8 @@
   - `neat_kcal`: profile.neat_kcal
   - `tef_kcal`: `floor(intake_kcal × profile.tef_rate)`
   - `balance.value`: `intake − bmr − neat − exercise − tef`（bmr null 時は balance null）
-  - `weight_kg`: 当日 WeightLog → なければ最新 → なければ initial_weight_kg
-  - `bmi` / `lbm_kg` / `body_fat_pct`: 当日 WeightLog → なければ最新（各フィールド独立で null 可）
+  - `weight_kg`: 当日 WeightLog（`log_date`）→ なければ **直近過去** の WeightLog → なければ initial_weight_kg（TOP 表示用。履歴グラフは当日行のみ）
+  - `bmi` / `lbm_kg` / `body_fat_pct`: 当日 WeightLog の各フィールド（未記録は null。履歴は carry-forward しない）
   - `body_composition_source`: `today` / `latest` / `none`
 
 - **エラー:** setup 未完了 → 409 PROFILE_NOT_SETUP
@@ -168,9 +168,11 @@
 
 | metric | day | week / month / year |
 |--------|-----|---------------------|
-| balance, intake, exercise, steps | 日次値 | **算術平均**（balance は computable な日のみ） |
-| bmr | 日次値 | 算術平均（lbm 欠損日は除外） |
-| weight, bmi, lbm, body_fat_pct | 日次値（当日→最新） | 期間内 **最終日** の値（データなければ null） |
+| balance, intake, exercise, steps | 日次値。**記録のない暦日は `null`**（後述 §10） | **算術平均**（balance は computable かつ活動あり日のみ） |
+| bmr | 日次値。**LBM が当日 WeightLog に存在する日のみ**（carry-forward なし） | 算術平均（lbm 欠損日は除外） |
+| weight, bmi, lbm, body_fat_pct | 日次値（**その日の WeightLog のみ**。未記録日は null） | 期間内 **最終日** の値（データなければ null） |
+
+- **day 期間の「記録あり」判定（balance / exercise）:** 当該日に次のいずれかが存在する場合のみ値を返す — MealLog 摂取、DailySteps 歩数、TreadmillLog / StrengthLog（`log_date`）、WeightLog（`log_date`）。LBM のみ Health 同期済みで他活動がない日は **balance null**。
 
 - **レスポンス（200）**
 
@@ -223,18 +225,28 @@
 |-----------|---------------|
 | neat_kcal | 0〜2000 整数 |
 | tef_rate | 0.00〜0.50（小数第 2 位まで） |
-| current_weight_kg | 30.0〜300.0。初回のみ WeightLog 追加 |
+| current_weight_kg | 30.0〜300.0。保存時に **当日 `log_date` の WeightLog を upsert**（体重のみ更新） |
 
 - `target_*` / `activity_factor` フィールドは **受け付けない**（送信時 400）
+
+#### `GET /api/v1/weights` / `POST /api/v1/weights`
+
+- **GET:** `log_date` 降順。最大 `limit` 件（デフォルト 30）
+- **POST:** **`log_date`（JST 暦日）1 日 1 行の upsert**（§10.1）
+  - Body: `weight_kg` 必須。`log_date` 省略時 JST 今日。`bmi` / `lbm_kg` / `body_fat_pct` は任意
+  - **送った項目だけ更新**（同日 Health sync の体組成は残る）
+  - 新規行で `weight_kg` のみの場合、既存体重解決値を default に使用可
+  - レスポンス 201、`WeightLog`（`log_date` 含む）
 
 #### 継続 API（v3 実装準拠）
 
 - 食事 POST: **`meal_slot`** 必須（`breakfast` / `lunch` / `dinner` / `snack`）。時刻からの自動振り分けは**行わない**
 - Health sync Body: `date`（必須）, `steps`, `weight_kg`, `bmi`, `lbm_kg`, `body_fat_pct`, `stride_cm`, `walking_speed_kmh`（いずれも任意）
+- Health sync 体組成: **`date` を `log_date` キーに WeightLog upsert**（送った metric のみ更新。旧来の同日 shortcuts 行削除→再 INSERT は**行わない**）
 - 歩幅・速度は **`daily_steps` に保存**（`user_profile` には持たない）
 - 歩数 kcal: MET 式または簡易式。`DashboardCards.walk_kcal` / `walk_calc_method` で返却
 - Myセット: DELETE `/food-presets/{id}` 対応
-- 運動ログ: POST に `log_date` 任意（省略時 JST 今日）。日付ストリップ選択日に記録可能
+- 運動ログ: POST に `log_date` 任意（省略時 JST 今日）。**DB 列 `log_date` に保存**し、一覧・消費 kcal 集計は `log_date` 等号一致（`logged_at` 範囲は使わない）
 
 ## 3. データベース設計
 
@@ -285,9 +297,31 @@ erDiagram
 
 **v3 で削除:** `activity_factor`, `target_kcal`, `target_protein_g`, `target_fat_g`, `target_carbs_g`
 
-#### `weight_logs`（v3 継続）
+#### `weight_logs`（v3 + migration 008）
 
-v1 + migration 003 相当: `bmi`, `lbm_kg`, `body_fat_pct` NULL 可
+| カラム | 型 | NULL | 制約 | 説明 |
+|--------|-----|------|------|------|
+| id | INT | NO | PK | |
+| **log_date** | DATE | NO | **UNIQUE**, INDEX | JST 暦日キー。**1 日 1 行** |
+| weight_kg | DECIMAL(5,2) | NO | | |
+| bmi | DECIMAL(4,1) | YES | | |
+| lbm_kg | DECIMAL(5,2) | YES | | |
+| body_fat_pct | DECIMAL(4,1) | YES | | |
+| source | ENUM('manual','shortcuts') | NO | | 最終更新ソース |
+| logged_at | DATETIME | NO | | 最終更新時刻（JST） |
+
+**upsert 方針（`upsert_weight_day`）:** `log_date` で検索。存在時は **リクエストで渡された非 null フィールドのみ**上書き（同日 manual 体重のみ → 体組成は維持）。不存在時は新規 INSERT（体重必須または default）。
+
+#### `treadmill_logs` / `strength_logs`（migration 009 追記）
+
+| カラム | 型 | NULL | 制約 | 説明 |
+|--------|-----|------|------|------|
+| id | INT | NO | PK | |
+| **log_date** | DATE | NO | INDEX | JST 暦日。**1 日複数行可**（部位・セッション別） |
+| logged_at | DATETIME | NO | INDEX | 記録操作時刻 |
+| … | | | | 既存列（minutes, calculated_kcal 等） |
+
+一覧 GET `?date=` および日次消費 kcal 集計は **`log_date = 指定日`**。POST の `log_date` をそのまま保存する。
 
 #### 削除テーブル
 
@@ -295,9 +329,9 @@ v1 + migration 003 相当: `bmi`, `lbm_kg`, `body_fat_pct` NULL 可
 
 #### その他テーブル
 
-`food_presets`, `meal_logs`（`barcode`, **`meal_slot`** 列含む）, `daily_steps`（**`stride_cm`**, **`walking_speed_kmh`** 列含む）, `treadmill_logs`, `strength_logs` — v1/v2 + migration 005/006
+`food_presets`, `meal_logs`（`barcode`, **`meal_slot`** 列含む）, `daily_steps`（**`stride_cm`**, **`walking_speed_kmh`** 列含む）, `treadmill_logs`, `strength_logs` — v1/v2 + migration 005〜009
 
-**Alembic（追記）:** `005_walk_met_params`（daily_steps 歩行パラメータ）, `006_meal_slot`, `007_drop_profile_walk_params`（profile から歩行パラメータ削除）
+**Alembic（追記）:** `005_walk_met_params`, `006_meal_slot`, `007_drop_profile_walk_params`, **`008_weight_log_date`**（weight_logs 再作成・1 日 1 行）, **`009_exercise_log_date`**（運動 log_date 追加）
 
 ## 4. 画面詳細
 
@@ -312,6 +346,15 @@ v1 + migration 003 相当: `bmi`, `lbm_kg`, `body_fat_pct` NULL 可
 | 基礎代謝カード | `bmr_status=lbm_missing` 時「Health で LBM を同期してください」 | 同上 |
 | カードタップ | 履歴画面へ。日/週/月/年セグメント | GET /dashboard/history/{metric} |
 | 縦スクロール | 9 カードすべて到達（NFR-011） | — |
+
+### 4.1.1 CardHistory UI（hotfix 2026-06-16）
+
+| 要素 | 動作 |
+|------|------|
+| 収支グラフ | **ゼロ基準の棒グラフ**（マイナスは下向き）。全点マイナス時も Y 軸スケールが棒長と一致 |
+| 未記録日 | 点・棒なし（`value: null`） |
+| 期間タブ | 4 期間を **metric 別に prefetch** し DOM 部分更新（タブ切替の体感速度改善） |
+| X 軸 | 末尾ラベル重なりを解消 |
 
 ### 4.2 食事
 
@@ -430,10 +473,46 @@ sequenceDiagram
 | DD-007 | Balance null 扱い | **解消** — §2.2 |
 | DD-008 | profile スキーマ | **解消** — §3.3 |
 | DD-009 | TOP スライド UI | はい（frontend-worker） |
-| DD-010 | 履歴グラフライブラリ選定 | はい（Chart.js 等・frontend） |
+| DD-010 | 履歴グラフライブラリ選定 | **解消** — Chart.js 棒グラフ（§4.1.1） |
+| DD-011 | 日次 log_date・部分 upsert | **解消** — §3.3, §10 |
+
+## 10. 日次 log_date 設計（hotfix 2026-06-16）
+
+### 10.1 方針
+
+JST 暦日を **集計・一覧の第一キー** とする。`logged_at` は操作時刻の記録に留め、日次クエリの境界判定には使わない。
+
+| テーブル | 日付列 | 1 日の行数 | 更新方式 |
+|----------|--------|-----------|----------|
+| `daily_steps` | `step_date` UNIQUE | 1 | upsert（最新 POST 勝ち） |
+| `weight_logs` | `log_date` UNIQUE | 1 | **部分 upsert**（送った列のみ） |
+| `meal_logs` | `log_date` | 複数 | INSERT |
+| `treadmill_logs` | `log_date` | 複数 | INSERT |
+| `strength_logs` | `log_date` | 複数 | INSERT |
+
+### 10.2 WeightLog 部分 upsert シーケンス
+
+```mermaid
+sequenceDiagram
+  participant S as Shortcuts
+  participant A as API
+  participant D as MySQL
+
+  S->>A: POST /sync/health date=6/15 lbm_kg=59.2
+  A->>D: upsert weight_logs log_date=6/15 lbm only
+  S->>A: POST /weights log_date=6/15 weight_kg=75
+  A->>D: upsert same row weight only
+  Note over D: lbm_kg=59.2 維持、weight_kg=75
+```
+
+### 10.3 履歴 API の null ルール
+
+- **実測・記録があった日のみ**グラフに値を出す（TOP カードの「最新体重」等を未記録日に載せない）
+- BMR / LBM 履歴: **測定日（WeightLog.log_date）の行に LBM がある日のみ**（最新 LBM の carry-forward なし）
 
 ## 変更履歴
 
 | 日付 | 変更内容 |
 |------|----------|
 | 2026-06-14 | 初版作成（v3 収支・UI・DB kenko_kanri） |
+| 2026-06-16 | hotfix: log_date 日次キー、WeightLog 部分 upsert、運動 log_date、履歴 null ルール、CardHistory UI |

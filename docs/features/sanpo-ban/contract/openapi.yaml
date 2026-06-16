@@ -305,7 +305,10 @@ paths:
                   $ref: "#/components/schemas/WeightLog"
     post:
       tags: [weights]
-      summary: Log weight manually
+      summary: Upsert weight for a log_date (partial update)
+      description: |
+        One row per JST calendar day (`log_date`). Only provided body fields are updated;
+        other fields on the same day (e.g. body composition from Health sync) are preserved.
       x-requirements: [FR-017]
       requestBody:
         required: true
@@ -359,6 +362,9 @@ paths:
     post:
       tags: [sync]
       summary: Sync steps and optional body composition from iPhone Shortcuts
+      description: |
+        Steps upsert `daily_steps` by `date`. Body metrics upsert `weight_logs` by `date` as `log_date`
+        (partial update — only sent fields; does not delete existing composition on the same day).
       x-requirements: [FR-020, FR-021, FR-022, FR-023]
       requestBody:
         required: true
@@ -947,6 +953,10 @@ components:
       properties:
         id:
           type: integer
+        log_date:
+          type: string
+          format: date
+          description: JST calendar day (aggregation key)
         logged_at:
           type: string
           format: date-time
@@ -968,6 +978,10 @@ components:
       type: object
       required: [minutes]
       properties:
+        log_date:
+          type: string
+          format: date
+          description: JST calendar day (defaults to today)
         minutes:
           type: integer
         speed_kmh:
@@ -993,6 +1007,10 @@ components:
       properties:
         id:
           type: integer
+        log_date:
+          type: string
+          format: date
+          description: JST calendar day (aggregation key)
         logged_at:
           type: string
           format: date-time
@@ -1007,6 +1025,10 @@ components:
       type: object
       required: [exercise_code, minutes]
       properties:
+        log_date:
+          type: string
+          format: date
+          description: JST calendar day (defaults to today)
         exercise_code:
           type: string
         minutes:

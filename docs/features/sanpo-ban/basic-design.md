@@ -205,8 +205,11 @@
 ### Health Sync I/F 概要
 
 - **エンドポイント:** `POST /api/sync/health`（詳細は詳細設計・OpenAPI）
-- **Body 概念:** `date`（YYYY-MM-DD）, `steps`（整数）, `weight_kg`（任意・小数）
-- **挙動:** 同一 `date` の歩数は最新 POST で上書き。体重は POST 時刻で WeightLog 追加
+- **Body 概念:** `date`（YYYY-MM-DD）, `steps`（整数）, `weight_kg`, `bmi`, `lbm_kg`, `body_fat_pct`, `stride_cm`, `walking_speed_kmh`（いずれも任意）
+- **挙動:**
+  - 同一 `date` の歩数は **`daily_steps.step_date` で upsert**（最新 POST 勝ち）
+  - 体組成・体重は **`weight_logs.log_date` で 1 日 1 行 upsert**（送った metric のみ更新。同日 shortcuts 行の削除→再 INSERT は行わない）
+  - 体組成のみ（体重なし）の sync も可
 
 ## 6. 認証・認可設計
 
@@ -277,6 +280,7 @@
 | 2026-06-13 | OPN-002: トレッドミル中スマホ非携行前提に変更（歩数控除ロジック削除） |
 | 2026-06-13 | **v2:** バーコード / OFF 連携、BarcodeLookup モジュール、OPN-006/007 解消 |
 | 2026-06-14 | **v3:** 収支モデル、TOP 9 カード、CardHistory、Settings、リネーム方針、Walks/Summary 廃止 |
+| 2026-06-16 | **hotfix:** 日次 log_date キー、WeightLog 部分 upsert、運動 log_date、履歴 null ルール |
 
 ---
 
@@ -361,8 +365,20 @@ NEAT / TEF は独立カードにせず、収支内訳または設定のみ。
 
 ### 10.6 Health Sync 拡張（継続 + v3 表示）
 
-- **Body 概念（既存）:** `date`, `steps`, `weight_kg`, `bmi`, `lbm_kg`, `body_fat_pct`（後 3 つ任意）
-- TOP カードは Body モジュールの「当日 → 最新」解決ロジックを共有
+- **Body 概念（既存）:** `date`, `steps`, `weight_kg`, `bmi`, `lbm_kg`, `body_fat_pct`, `stride_cm`, `walking_speed_kmh`（後 6 つ任意）
+- TOP カード: 体重は当日→過去最新→initial。体組成各フィールドは当日 WeightLog のみ
+- **WeightLog:** `log_date`（JST）1 日 1 行。Health / manual / 設定保存は **部分 upsert**（詳細設計 §10）
+
+### 10.10 日次 log_date（2026-06-16 hotfix）
+
+| エンティティ | 日付キー | 備考 |
+|-------------|---------|------|
+| 歩数 | `daily_steps.step_date` | 1 日 1 行 |
+| 体重・体組成 | `weight_logs.log_date` | 1 日 1 行、部分 upsert |
+| 食事 | `meal_logs.log_date` | 1 日複数行 |
+| トレッドミル・筋トレ | `log_date` 列（009） | 1 日複数行。集計は log_date 等号 |
+
+CardHistory は **記録のあった日のみ**値を表示（未記録日 null）。BMR/LBM 履歴に最新値の carry-forward なし。
 
 ### 10.7 非機能（v3 追記）
 

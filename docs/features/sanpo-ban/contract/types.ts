@@ -148,6 +148,7 @@ export interface MealLogCreate {
 
 export interface WeightLog {
   id: number;
+  log_date: string;
   weight_kg: number;
   bmi: number | null;
   lbm_kg: number | null;
@@ -169,6 +170,7 @@ export interface HealthSyncRequest {
 
 export interface TreadmillLog {
   id: number;
+  log_date: string;
   logged_at: string;
   minutes: number;
   speed_kmh: number | null;
@@ -179,6 +181,7 @@ export interface TreadmillLog {
 
 export interface StrengthLog {
   id: number;
+  log_date: string;
   logged_at: string;
   exercise_code: string;
   minutes: number;
