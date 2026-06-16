@@ -102,7 +102,7 @@ function renderConfirmForm(
   });
 }
 
-export function renderManualForm(
+function renderManualForm(
   container: HTMLElement,
   logDate: string,
   onDone: () => Promise<void>,

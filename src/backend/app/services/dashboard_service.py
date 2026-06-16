@@ -1,5 +1,4 @@
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
 from typing import Literal
 
 from sqlalchemy import func, select
@@ -50,10 +49,6 @@ def get_profile(db: Session) -> UserProfile:
 def require_setup(profile: UserProfile) -> None:
     if not profile.setup_completed:
         raise profile_not_setup()
-
-
-def _optional_float(value: Decimal | None) -> float | None:
-    return float(value) if value is not None else None
 
 
 def latest_weight_entry(db: Session, on_date: date, profile: UserProfile) -> WeightLog | None:
@@ -146,28 +141,21 @@ def sum_meals(db: Session, log_date: date) -> MacroTotals:
     )
 
 
-def resolve_walk_params(
-    db: Session, on_date: date, profile: UserProfile
-) -> tuple[float | None, float | None]:
+def resolve_walk_params(db: Session, on_date: date) -> tuple[float | None, float | None]:
     steps_row = db.scalar(select(DailySteps).where(DailySteps.step_date == on_date))
-    stride_cm: float | None = None
-    speed_kmh: float | None = None
-    if steps_row:
-        if steps_row.stride_cm is not None:
-            stride_cm = float(steps_row.stride_cm)
-        if steps_row.walking_speed_kmh is not None:
-            speed_kmh = float(steps_row.walking_speed_kmh)
-    if stride_cm is None and profile.stride_cm is not None:
-        stride_cm = float(profile.stride_cm)
-    if speed_kmh is None and profile.walking_speed_kmh is not None:
-        speed_kmh = float(profile.walking_speed_kmh)
+    if not steps_row:
+        return None, None
+    stride_cm = float(steps_row.stride_cm) if steps_row.stride_cm is not None else None
+    speed_kmh = (
+        float(steps_row.walking_speed_kmh) if steps_row.walking_speed_kmh is not None else None
+    )
     return stride_cm, speed_kmh
 
 
 def burn_for_date(db: Session, on_date: date, weight_kg: float, profile: UserProfile) -> BurnTotals:
     steps_row = db.scalar(select(DailySteps).where(DailySteps.step_date == on_date))
     steps = steps_row.steps if steps_row else 0
-    stride_cm, speed_kmh = resolve_walk_params(db, on_date, profile)
+    stride_cm, speed_kmh = resolve_walk_params(db, on_date)
     walk, _ = walk_burn_kcal(steps, weight_kg, stride_cm=stride_cm, speed_kmh=speed_kmh)
 
     day_start = datetime.combine(on_date, time.min, tzinfo=JST)
@@ -198,30 +186,6 @@ def burn_for_date(db: Session, on_date: date, weight_kg: float, profile: UserPro
 def steps_for_date(db: Session, on_date: date) -> int:
     steps_row = db.scalar(select(DailySteps).where(DailySteps.step_date == on_date))
     return steps_row.steps if steps_row else 0
-
-
-def _weight_log_on_date(db: Session, on_date: date) -> WeightLog | None:
-    day_start = datetime.combine(on_date, time.min, tzinfo=JST)
-    day_end = day_start + timedelta(days=1)
-    return db.scalar(
-        select(WeightLog)
-        .where(WeightLog.logged_at >= day_start, WeightLog.logged_at < day_end)
-        .order_by(WeightLog.logged_at.desc())
-        .limit(1)
-    )
-
-
-def _steps_logged_on_date(db: Session, on_date: date) -> int | None:
-    steps_row = db.scalar(select(DailySteps).where(DailySteps.step_date == on_date))
-    return steps_row.steps if steps_row else None
-
-
-def history_day_metric(
-    db: Session, profile: UserProfile, metric: HistoryMetric, on_date: date
-) -> float | None:
-    """履歴用: その日に記録がなければ None（TOP カードの最新値フォールバックは使わない）。"""
-    cache = _HistoryRangeCache(db, profile, on_date, on_date)
-    return cache.day_metric(metric, on_date)
 
 
 class _HistoryRangeCache:
@@ -288,7 +252,7 @@ class _HistoryRangeCache:
         row = self.weight_by_date.get(on_date)
         weight = float(row.weight_kg) if row else float(self.profile.initial_weight_kg)
         steps = self.steps_by_date.get(on_date)
-        stride_cm, speed_kmh = resolve_walk_params(self.db, on_date, self.profile)
+        stride_cm, speed_kmh = resolve_walk_params(self.db, on_date)
         walk, _ = walk_burn_kcal(
             steps or 0,
             weight,
@@ -353,7 +317,7 @@ def daily_snapshot(db: Session, on_date: date, profile: UserProfile) -> dict:
     intake = sum_meals(db, on_date)
     weight_kg = latest_weight_kg(db, on_date, profile)
     burn = burn_for_date(db, on_date, weight_kg, profile)
-    stride_cm, speed_kmh = resolve_walk_params(db, on_date, profile)
+    stride_cm, speed_kmh = resolve_walk_params(db, on_date)
     _, walk_calc_method = walk_burn_kcal(
         steps_for_date(db, on_date),
         weight_kg,

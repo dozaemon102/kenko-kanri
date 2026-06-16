@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,8 +9,6 @@ class ProfileResponse(BaseModel):
     sex: str
     neat_kcal: int
     tef_rate: float
-    stride_cm: float | None = None
-    walking_speed_kmh: float | None = None
     initial_weight_kg: float
     setup_completed: bool
 
@@ -25,8 +22,6 @@ class ProfileUpdate(BaseModel):
     current_weight_kg: float = Field(ge=30, le=300)
     neat_kcal: int | None = Field(default=None, ge=0, le=2000)
     tef_rate: float | None = Field(default=None, ge=0, le=0.5)
-    stride_cm: float | None = Field(default=None, ge=30, le=120)
-    walking_speed_kmh: float | None = Field(default=None, ge=1, le=10)
     setup_completed: bool = False
 
 

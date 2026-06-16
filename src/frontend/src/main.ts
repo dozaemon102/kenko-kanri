@@ -10,6 +10,7 @@ import type {
   Profile,
   ProfileUpdate,
 } from "./types";
+import { MEAL_SLOT_LABELS } from "./types";
 
 type Tab = "top" | "meals" | "exercise" | "settings";
 
@@ -22,22 +23,22 @@ let selectedDate = new Date().toISOString().slice(0, 10);
 const MEAL_SLOTS: { id: MealSlot; label: string; icon: string }[] = [
   {
     id: "breakfast",
-    label: "朝食",
+    label: MEAL_SLOT_LABELS.breakfast,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" fill="currentColor" opacity=".25"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" stroke-linecap="round"/></svg>`,
   },
   {
     id: "lunch",
-    label: "昼食",
+    label: MEAL_SLOT_LABELS.lunch,
     icon: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5" opacity=".85"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`,
   },
   {
     id: "dinner",
-    label: "夕食",
+    label: MEAL_SLOT_LABELS.dinner,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 14a4 4 0 018 0" fill="currentColor" opacity=".2"/><path d="M12 3a7 7 0 00-7 7c0 3.5 2 6.5 5 7.8V20h4v-2.2c3-1.3 5-4.3 5-7.8a7 7 0 00-7-7z" stroke-linecap="round"/></svg>`,
   },
   {
     id: "snack",
-    label: "間食",
+    label: MEAL_SLOT_LABELS.snack,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 10h12v8a2 2 0 01-2 2H8a2 2 0 01-2-2v-8z" fill="currentColor" opacity=".2"/><path d="M8 10V8a4 4 0 018 0v2M10 14h4" stroke-linecap="round"/></svg>`,
   },
 ];
@@ -182,12 +183,6 @@ function bindDateStrip(tab: "meals" | "exercise", rerender: () => Promise<void>)
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatValue(metric: HistoryMetric, value: number | null | undefined): string {
-  const parts = formatMetricParts(metric, value);
-  if (parts.unit) return `${parts.number} ${parts.unit}`;
-  return parts.number;
 }
 
 function formatMetricParts(
@@ -489,9 +484,7 @@ async function renderExercise(): Promise<void> {
   const walkMeta =
     cards.stride_cm != null && cards.walking_speed_kmh != null
       ? `歩幅 ${cards.stride_cm} cm · 速度 ${cards.walking_speed_kmh} km/h`
-      : cards.walk_calc_method === "met"
-        ? ""
-        : "歩幅・速度未設定（簡易式）";
+      : "歩幅・速度未設定（簡易式）";
 
   const treadmillItems = treadmill.length
     ? treadmill

@@ -1,13 +1,7 @@
 import { api } from "./api/client";
 import { openBarcodeFlow, openManualMealFlow } from "./barcode-flow";
 import type { FoodPreset, MealSlot } from "./types";
-
-const SLOT_LABELS: Record<MealSlot, string> = {
-  breakfast: "朝食",
-  lunch: "昼食",
-  dinner: "夕食",
-  snack: "間食",
-};
+import { MEAL_SLOT_LABELS } from "./types";
 
 function openModal(innerHtml: string, onMount: (body: HTMLElement, close: () => void) => void): void {
   const overlay = document.createElement("div");
@@ -26,7 +20,7 @@ function openModal(innerHtml: string, onMount: (body: HTMLElement, close: () => 
 function showEntryMenu(logDate: string, mealSlot: MealSlot, onDone: () => Promise<void>): void {
   openModal(
     `
-    <h2 class="modal-title">${SLOT_LABELS[mealSlot]}を入力</h2>
+    <h2 class="modal-title">${MEAL_SLOT_LABELS[mealSlot]}を入力</h2>
     <p class="muted">記録方法を選んでください</p>
     <button class="btn btn-primary btn-block entry-menu-btn" data-choice="barcode">バーコード</button>
     <button class="btn btn-block entry-menu-btn modal-secondary" data-choice="manual">手入力</button>
@@ -113,7 +107,7 @@ async function showPresetFlow(
 
   openModal(
     `
-    <h2 class="modal-title">Myセット → ${SLOT_LABELS[mealSlot]}</h2>
+    <h2 class="modal-title">Myセット → ${MEAL_SLOT_LABELS[mealSlot]}</h2>
     <p class="muted">タップで食事に追加 · 削除で Myセットから除去</p>
     <div class="preset-list">${listHtml}</div>
     <button class="btn btn-primary btn-block" id="preset-register-btn">登録</button>

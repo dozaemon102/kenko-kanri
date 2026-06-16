@@ -24,7 +24,7 @@ function detailLabel(pt: HistoryPoint, period: HistoryPeriod): string {
   return `${pt.label}年`;
 }
 
-export function formatHistoryValue(
+function formatHistoryValue(
   metric: HistoryMetric,
   value: number | null | undefined
 ): string {

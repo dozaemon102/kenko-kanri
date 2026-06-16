@@ -227,10 +227,14 @@
 
 - `target_*` / `activity_factor` フィールドは **受け付けない**（送信時 400）
 
-#### 継続 API（変更なし・参照）
+#### 継続 API（v3 実装準拠）
 
-- 食事 / Myセット / 運動 / 体重 / Health sync / バーコード: v1-core + v2-barcode の定義をそのまま適用
-- Health sync Body: `date`, `steps`, `weight_kg`, `bmi`, `lbm_kg`, `body_fat_pct`（後 3 つ任意）
+- 食事 POST: **`meal_slot`** 必須（`breakfast` / `lunch` / `dinner` / `snack`）。時刻からの自動振り分けは**行わない**
+- Health sync Body: `date`（必須）, `steps`, `weight_kg`, `bmi`, `lbm_kg`, `body_fat_pct`, `stride_cm`, `walking_speed_kmh`（いずれも任意）
+- 歩幅・速度は **`daily_steps` に保存**（`user_profile` には持たない）
+- 歩数 kcal: MET 式または簡易式。`DashboardCards.walk_kcal` / `walk_calc_method` で返却
+- Myセット: DELETE `/food-presets/{id}` 対応
+- 運動ログ: POST に `log_date` 任意（省略時 JST 今日）。日付ストリップ選択日に記録可能
 
 ## 3. データベース設計
 
@@ -272,7 +276,7 @@ erDiagram
 | height_cm | DECIMAL(5,2) | NO | | |
 | birth_date | DATE | NO | | |
 | sex | ENUM('male','female') | NO | | |
-| **neat_kcal** | INT | NO | **200** | NEAT kcal |
+| **neat_kcal** | INT | NO | **180** | NEAT kcal |
 | **tef_rate** | DECIMAL(4,3) | NO | **0.100** | TEF 率（0.10 = 10%） |
 | initial_weight_kg | DECIMAL(5,2) | NO | | |
 | setup_completed | TINYINT(1) | NO | 0 | |
@@ -291,7 +295,9 @@ v1 + migration 003 相当: `bmi`, `lbm_kg`, `body_fat_pct` NULL 可
 
 #### その他テーブル
 
-`food_presets`, `meal_logs`（barcode 列含む）, `daily_steps`, `treadmill_logs`, `strength_logs` — v1/v2 定義を維持
+`food_presets`, `meal_logs`（`barcode`, **`meal_slot`** 列含む）, `daily_steps`（**`stride_cm`**, **`walking_speed_kmh`** 列含む）, `treadmill_logs`, `strength_logs` — v1/v2 + migration 005/006
+
+**Alembic（追記）:** `005_walk_met_params`（daily_steps 歩行パラメータ）, `006_meal_slot`, `007_drop_profile_walk_params`（profile から歩行パラメータ削除）
 
 ## 4. 画面詳細
 
@@ -330,8 +336,10 @@ v1 + migration 003 相当: `bmi`, `lbm_kg`, `body_fat_pct` NULL 可
 | 生年月日 | date | ○ | 同上 |
 | 性別 | male/female | ○ | 同上 |
 | 体重 kg | number | 初回 ○ | 同上 |
-| NEAT kcal | int | ○ default 200 | 同上 |
+| NEAT kcal | int | ○ default 180 | 同上 |
 | TEF 率 % | number | ○ default 10 | tef_rate=0.10 |
+
+歩幅・歩行速度の入力欄は**なし**（Health sync で `daily_steps` に保存）。
 
 初回 `setup_completed=false` 時は設定タブに誘導バナー（TOP でも可）。
 

@@ -13,14 +13,21 @@ export type HistoryMetric =
 
 export type HistoryPeriod = "day" | "week" | "month" | "year";
 
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+
+export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
+  breakfast: "朝食",
+  lunch: "昼食",
+  dinner: "夕食",
+  snack: "間食",
+};
+
 export interface Profile {
   height_cm: number;
   birth_date: string;
   sex: Sex;
   neat_kcal: number;
   tef_rate: number;
-  stride_cm: number | null;
-  walking_speed_kmh: number | null;
   initial_weight_kg: number;
   setup_completed: boolean;
 }
@@ -32,8 +39,6 @@ export interface ProfileUpdate {
   current_weight_kg: number;
   neat_kcal?: number;
   tef_rate?: number;
-  stride_cm?: number | null;
-  walking_speed_kmh?: number | null;
   setup_completed?: boolean;
 }
 
@@ -118,8 +123,6 @@ export interface FoodLookupResponse {
   serving_note: string | null;
 }
 
-export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
-
 export interface MealCreate {
   log_date: string;
   meal_slot: MealSlot;
@@ -162,14 +165,4 @@ export interface StrengthLog {
   minutes: number;
   logged_at: string;
   calculated_kcal: number;
-}
-
-export interface WeightLog {
-  id: number;
-  weight_kg: number;
-  bmi: number | null;
-  lbm_kg: number | null;
-  body_fat_pct: number | null;
-  source: string;
-  logged_at: string;
 }

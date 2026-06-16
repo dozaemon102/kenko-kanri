@@ -2,8 +2,6 @@
 
 個人向けダイエット・体組成ダッシュボード。**カロリー収支**（摂取 − 基礎代謝 − NEAT − 運動 − TEF）を中心に、食事・運動・体重・体組成（BMI / LBM / 体脂肪率）を一か所で把握する。iPhone ショートカットで歩数・体重・体組成を同期。LAN / Tailscale 内の個人利用。
 
-**旧名:** 散歩判（sanpo-ban）— v3 でリネーム予定。
-
 ## 目的
 
 - カロリー収支の**赤字（マイナス）**を可視化し、ダイエットを継続しやすくする
@@ -21,7 +19,7 @@
 |----|------|------|
 | v1 | MVP ダッシュボード | **完了** |
 | v2 | バーコード + Open Food Facts | **完了** |
-| **v3** | UI 刷新・収支モデル・健康管理リネーム | **実装待ち** |
+| **v3** | UI 刷新・収支モデル・健康管理リネーム | **完了** |
 
 ## UI
 
@@ -41,7 +39,7 @@
 | 項 | 定義 |
 |----|------|
 | 基礎代謝 | Katch–McArdle `370 + 21.6 × LBM(kg)` |
-| NEAT | 初期 200 kcal（設定で変更可） |
+| NEAT | 初期 180 kcal（設定で変更可） |
 | TEF | 摂取の 10%（設定で変更可） |
 | 運動 | 歩数 kcal + トレッドミル + 筋トレ |
 | 符号 | **マイナス = 赤字 = 痩せ方向** |
@@ -60,25 +58,25 @@
 | タブ | 内容 |
 |------|------|
 | TOP | 収支・体組成カード |
-| 食事 | Myセット（旧プリセット）・手入力・バーコード。PFC は**合計 g のみ** |
-| 運動 | Myセット・手入力 |
-| 設定 | 身長・生年月日・性別・NEAT・TEF 率 |
+| 食事 | Myセット・手入力・バーコード。朝食/昼食/夕食/間食は**押した枠**で記録（`meal_slot`）。PFC は**合計 g のみ** |
+| 運動 | 歩数（Health sync）・トレッドミル・筋トレ。日付ストリップで過去日記録可 |
+| 設定 | 身長・生年月日・性別・NEAT・TEF 率（歩幅・速度は Health sync → `daily_steps`） |
 
 - **廃止:** 散歩タブ・週タブ・散歩記録（発見メモ含む）
 
-### リネーム
+### リネーム（v3 完了）
 
 | 項目 | 値 |
 |------|-----|
 | 表示名 | 健康管理 |
 | slug | `kenko-kanri` |
-| 対象 | リポジトリ・フォルダ・systemd・UI 文言など**全面** |
+| DB | `kenko_kanri` / ユーザー `kenko` |
 
 ### 技術・運用（継続）
 
 - DB: MySQL 8.x / Backend: FastAPI / Frontend: Vite + TS
 - 本番: Raspberry Pi + Tailscale HTTPS
-- Health 同期: `POST /api/v1/sync/health`（`date` のみ必須、他は任意）
+- Health 同期: `POST /api/v1/sync/health`（`date` 必須、`steps` / 体組成 / `stride_cm` / `walking_speed_kmh` は任意）
 - 外部 API: Open Food Facts（バーコード時）
 
 ## ディレクトリ
@@ -86,7 +84,7 @@
 ```
 docs/
 ├── architecture/
-└── features/sanpo-ban/   # v3 完了後 feature 名整理予定
+└── features/sanpo-ban/   # 初回 feature 名（実装は kenko-kanri）
 src/
 ├── frontend/
 ├── backend/

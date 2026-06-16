@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date as date_cls, datetime, time, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Response
@@ -48,6 +48,11 @@ DEFAULT_NEAT = 180
 DEFAULT_TEF = Decimal("0.100")
 
 
+def _day_bounds(on_date: date_cls) -> tuple[datetime, datetime]:
+    start = datetime.combine(on_date, time.min, tzinfo=now_jst().tzinfo)
+    return start, start + timedelta(days=1)
+
+
 def _profile_response(p: UserProfile) -> ProfileResponse:
     return ProfileResponse(
         height_cm=float(p.height_cm),
@@ -55,8 +60,6 @@ def _profile_response(p: UserProfile) -> ProfileResponse:
         sex=p.sex,
         neat_kcal=p.neat_kcal,
         tef_rate=float(p.tef_rate),
-        stride_cm=float(p.stride_cm) if p.stride_cm is not None else None,
-        walking_speed_kmh=float(p.walking_speed_kmh) if p.walking_speed_kmh is not None else None,
         initial_weight_kg=float(p.initial_weight_kg),
         setup_completed=p.setup_completed,
     )
@@ -95,10 +98,6 @@ def put_profile(body: ProfileUpdate, db: Session = Depends(get_db)) -> ProfileRe
         profile.tef_rate = Decimal(str(body.tef_rate))
     elif profile.tef_rate is None:
         profile.tef_rate = DEFAULT_TEF
-    if body.stride_cm is not None:
-        profile.stride_cm = Decimal(str(body.stride_cm))
-    if body.walking_speed_kmh is not None:
-        profile.walking_speed_kmh = Decimal(str(body.walking_speed_kmh))
     profile.setup_completed = body.setup_completed
     profile.updated_at = now
 
@@ -116,8 +115,6 @@ def put_profile(body: ProfileUpdate, db: Session = Depends(get_db)) -> ProfileRe
 
 @router.get("/dashboard/top", response_model=DashboardTop)
 def dashboard_top(date: str | None = None, db: Session = Depends(get_db)) -> DashboardTop:
-    from datetime import date as date_cls
-
     on_date = date_cls.fromisoformat(date) if date else today_jst()
     return build_dashboard_top(db, on_date)
 
@@ -129,8 +126,6 @@ def dashboard_history(
     anchor_date: str | None = None,
     db: Session = Depends(get_db),
 ) -> DashboardHistory:
-    from datetime import date as date_cls
-
     anchor = date_cls.fromisoformat(anchor_date) if anchor_date else today_jst()
     return build_history(db, metric, period, anchor)
 
@@ -181,8 +176,6 @@ async def lookup_food_barcode(barcode: str) -> FoodLookupResponse:
 
 @router.get("/meals", response_model=list[MealLogResponse])
 def list_meals(date: str, db: Session = Depends(get_db)) -> list[MealLog]:
-    from datetime import date as date_cls
-
     log_date = date_cls.fromisoformat(date)
     return list(
         db.scalars(select(MealLog).where(MealLog.log_date == log_date).order_by(MealLog.logged_at))
@@ -263,8 +256,6 @@ def delete_weight(weight_id: int, db: Session = Depends(get_db)) -> Response:
 
 @router.post("/sync/health")
 def sync_health(body: HealthSyncRequest, db: Session = Depends(get_db)) -> dict:
-    from datetime import time as time_cls, timedelta
-
     now = now_jst()
     steps_logged = False
     if body.steps is not None:
@@ -305,7 +296,7 @@ def sync_health(body: HealthSyncRequest, db: Session = Depends(get_db)) -> dict:
     weight_logged = False
     body_composition_logged = False
     if body.weight_kg is not None:
-        day_start = datetime.combine(body.date, time_cls.min, tzinfo=now.tzinfo)
+        day_start = datetime.combine(body.date, time.min, tzinfo=now.tzinfo)
         day_end = day_start + timedelta(days=1)
         for row in db.scalars(
             select(WeightLog).where(
@@ -319,7 +310,7 @@ def sync_health(body: HealthSyncRequest, db: Session = Depends(get_db)) -> dict:
         log_at = (
             now
             if body.date == today_jst()
-            else datetime.combine(body.date, time_cls(12, 0), tzinfo=now.tzinfo)
+            else datetime.combine(body.date, time(12, 0), tzinfo=now.tzinfo)
         )
         db.add(
             create_weight_log(
@@ -356,11 +347,8 @@ def sync_health(body: HealthSyncRequest, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/exercises/treadmill", response_model=list[TreadmillResponse])
 def list_treadmill(date: str | None = None, db: Session = Depends(get_db)) -> list[TreadmillLog]:
-    from datetime import date as date_cls, time, timedelta
-
     on_date = date_cls.fromisoformat(date) if date else today_jst()
-    start = datetime.combine(on_date, time.min, tzinfo=now_jst().tzinfo)
-    end = start + timedelta(days=1)
+    start, end = _day_bounds(on_date)
     return list(
         db.scalars(
             select(TreadmillLog)
@@ -407,11 +395,8 @@ def strength_templates() -> list[StrengthTemplate]:
 
 @router.get("/exercises/strength", response_model=list[StrengthResponse])
 def list_strength(date: str | None = None, db: Session = Depends(get_db)) -> list[StrengthLog]:
-    from datetime import date as date_cls, time, timedelta
-
     on_date = date_cls.fromisoformat(date) if date else today_jst()
-    start = datetime.combine(on_date, time.min, tzinfo=now_jst().tzinfo)
-    end = start + timedelta(days=1)
+    start, end = _day_bounds(on_date)
     return list(
         db.scalars(
             select(StrengthLog)

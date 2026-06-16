@@ -684,8 +684,19 @@ components:
           nullable: true
         exercise_kcal:
           type: integer
+        walk_kcal:
+          type: integer
         steps:
           type: integer
+        stride_cm:
+          type: number
+          nullable: true
+        walking_speed_kmh:
+          type: number
+          nullable: true
+        walk_calc_method:
+          type: string
+          enum: [met, simple]
         body_fat_pct:
           type: number
           nullable: true
@@ -834,14 +845,20 @@ components:
         logged_at:
           type: string
           format: date-time
+        meal_slot:
+          type: string
+          enum: [breakfast, lunch, dinner, snack]
 
     MealLogCreate:
       type: object
-      required: [log_date, name, kcal, protein_g, fat_g, carbs_g]
+      required: [log_date, meal_slot, name, kcal, protein_g, fat_g, carbs_g]
       properties:
         log_date:
           type: string
           format: date
+        meal_slot:
+          type: string
+          enum: [breakfast, lunch, dinner, snack]
         name:
           type: string
         kcal:
@@ -893,6 +910,16 @@ components:
         steps:
           type: integer
           minimum: 0
+          nullable: true
+        stride_cm:
+          type: number
+          minimum: 30
+          maximum: 120
+          nullable: true
+        walking_speed_kmh:
+          type: number
+          minimum: 1
+          maximum: 10
           nullable: true
         weight_kg:
           type: number

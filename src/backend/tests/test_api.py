@@ -288,20 +288,7 @@ def test_neat_tef_affects_balance(client):
 
 
 def test_health_sync_walk_params_and_met_dashboard(client):
-    client.put(
-        "/api/v1/profile",
-        json={
-            "height_cm": 175,
-            "birth_date": "1990-01-15",
-            "sex": "male",
-            "current_weight_kg": 72,
-            "neat_kcal": 180,
-            "tef_rate": 0.10,
-            "stride_cm": 70,
-            "walking_speed_kmh": 4.0,
-            "setup_completed": True,
-        },
-    )
+    _setup_profile(client)
     r = client.post(
         "/api/v1/sync/health",
         json={

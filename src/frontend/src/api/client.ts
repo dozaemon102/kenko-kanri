@@ -13,7 +13,6 @@ import type {
   ProfileUpdate,
   StrengthLog,
   TreadmillLog,
-  WeightLog,
 } from "../types";
 
 const BASE = "/api/v1";
@@ -66,8 +65,6 @@ export const api = {
         food_preset_id: preset.id,
       }),
     }),
-  getWeights: (limit = 30) => request<WeightLog[]>(`/weights?limit=${limit}`),
-  deleteWeight: (weightId: number) => request<void>(`/weights/${weightId}`, { method: "DELETE" }),
   getTreadmillLogs: (date?: string) =>
     request<TreadmillLog[]>(`/exercises/treadmill${date ? `?date=${date}` : ""}`),
   deleteTreadmill: (logId: number) =>

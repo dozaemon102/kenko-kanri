@@ -71,7 +71,7 @@ def normalize_product(barcode: str, payload: dict[str, Any]) -> dict[str, Any]:
 async def lookup_barcode(barcode: str) -> dict[str, Any]:
     code = validate_barcode(barcode)
     url = f"{settings.off_api_base_url.rstrip('/')}/api/v2/product/{code}.json"
-    headers = {"User-Agent": "Sanpo-ban/2.0 (personal use)"}
+    headers = {"User-Agent": "Kenko-kanri/3.0 (personal use)"}
     timeout = httpx.Timeout(settings.off_timeout_seconds)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:

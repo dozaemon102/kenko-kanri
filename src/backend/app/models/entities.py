@@ -16,8 +16,6 @@ class UserProfile(Base):
     sex: Mapped[str] = mapped_column(Enum("male", "female", name="sex_enum"), nullable=False)
     neat_kcal: Mapped[int] = mapped_column(Integer, nullable=False, default=180)
     tef_rate: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False, default=Decimal("0.100"))
-    stride_cm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
-    walking_speed_kmh: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
     initial_weight_kg: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
     setup_completed: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -1,7 +1,7 @@
 [project]
 name = "kenko-kanri-api"
 version = "1.0.0"
-description = "Sanpo-ban diet dashboard API"
+description = "Kenko-kanri diet dashboard API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

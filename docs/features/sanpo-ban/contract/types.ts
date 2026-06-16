@@ -58,7 +58,11 @@ export interface DashboardCards {
   intake_kcal: number;
   bmr_kcal: number | null;
   exercise_kcal: number;
+  walk_kcal: number;
   steps: number;
+  stride_cm: number | null;
+  walking_speed_kmh: number | null;
+  walk_calc_method: "met" | "simple";
   body_fat_pct: number | null;
   bmi: number | null;
   lbm_kg: number | null;
@@ -106,6 +110,7 @@ export interface FoodPreset {
 export interface MealLog {
   id: number;
   log_date: string;
+  meal_slot: MealSlot;
   name: string;
   kcal: number;
   protein_g: number;
@@ -127,8 +132,11 @@ export interface FoodLookup {
   serving_note?: string;
 }
 
+export type MealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+
 export interface MealLogCreate {
   log_date: string;
+  meal_slot: MealSlot;
   name: string;
   kcal: number;
   protein_g: number;
@@ -151,6 +159,8 @@ export interface WeightLog {
 export interface HealthSyncRequest {
   date: string;
   steps?: number | null;
+  stride_cm?: number | null;
+  walking_speed_kmh?: number | null;
   weight_kg?: number | null;
   bmi?: number | null;
   lbm_kg?: number | null;
