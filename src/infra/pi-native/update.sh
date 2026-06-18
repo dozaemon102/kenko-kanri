@@ -8,7 +8,9 @@ SERVICE="${SERVICE:-kenko-kanri}"
 echo "==> 更新: $APP_DIR"
 cd "$APP_DIR"
 
-git pull origin main
+# chmod +x による filemode 差分で pull が止まるのを防ぐ
+git -c core.fileMode=false checkout -- src/infra/pi-native/update.sh 2>/dev/null || true
+git -c core.fileMode=false pull origin main
 
 cd src/backend
 if [[ ! -f .env ]]; then

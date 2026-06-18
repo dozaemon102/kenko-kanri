@@ -114,13 +114,22 @@ Pi Imager で **USB SSD から OS 起動**（Pi 4/5 対応）。以降 SD は使
 
 ## 6. 日常操作
 
-```bash
-# コード更新（推奨）
-chmod +x src/infra/pi-native/update.sh
-./src/infra/pi-native/update.sh
+**コード更新はこの1本だけ**（`git pull` と `npm run build` をルートで別々に実行しない）:
 
-# 手動の場合
-sudo systemctl restart kenko-kanri
+```bash
+cd ~/kenko-kanri
+bash src/infra/pi-native/update.sh
+```
+
+`update.sh` が `git pull` → backend 同期 → `src/frontend` でビルド → サービス再起動まで行います。
+
+**注意:** `chmod +x` してから実行すると filemode 差分で `git pull` が止まります。`bash` で実行するか、`chmod` はしないでください。
+
+`git pull` で `update.sh` の変更と衝突した場合:
+
+```bash
+git -c core.fileMode=false checkout -- src/infra/pi-native/update.sh
+bash src/infra/pi-native/update.sh
 ```
 
 **サービス名:** 新規インストールは `kenko-kanri`。旧環境は `sanpo-ban` のままのことがあります。
