@@ -2,7 +2,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.open_food_facts import lookup_barcode, normalize_product, validate_barcode
+from app.services.open_food_facts import (
+    lookup_barcode,
+    normalize_barcode_for_lookup,
+    normalize_product,
+    validate_barcode,
+)
 from app.core.errors import AppError
 
 
@@ -10,6 +15,10 @@ def test_validate_barcode_rejects_invalid():
     with pytest.raises(AppError) as exc:
         validate_barcode("abc")
     assert exc.value.status_code == 400
+
+
+def test_normalize_barcode_for_lookup_upc_a():
+    assert normalize_barcode_for_lookup("490123456789") == "0490123456789"
 
 
 def test_normalize_product_success():

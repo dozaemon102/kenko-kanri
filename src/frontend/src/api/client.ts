@@ -24,7 +24,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.message ?? res.statusText);
+    const message = body?.error?.message;
+    if (typeof message === "string" && message.length > 0) {
+      throw new Error(message);
+    }
+    if (Array.isArray(body?.detail)) {
+      const fields = body.detail
+        .map((item: { loc?: unknown[]; msg?: string }) => {
+          const field = item.loc?.slice(-1)[0];
+          return field ? `${field}: ${item.msg ?? "invalid"}` : item.msg;
+        })
+        .filter(Boolean)
+        .join("; ");
+      if (fields) throw new Error(fields);
+    }
+    throw new Error(res.statusText);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

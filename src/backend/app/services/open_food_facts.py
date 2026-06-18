@@ -16,6 +16,13 @@ def validate_barcode(barcode: str) -> str:
     return barcode
 
 
+def normalize_barcode_for_lookup(barcode: str) -> str:
+    code = validate_barcode(barcode)
+    if len(code) == 12:
+        return f"0{code}"
+    return code
+
+
 def _pick_name(product: dict[str, Any]) -> str:
     for key in ("product_name_ja", "product_name", "generic_name_ja", "generic_name"):
         value = product.get(key)
@@ -69,7 +76,7 @@ def normalize_product(barcode: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def lookup_barcode(barcode: str) -> dict[str, Any]:
-    code = validate_barcode(barcode)
+    code = normalize_barcode_for_lookup(barcode)
     url = f"{settings.off_api_base_url.rstrip('/')}/api/v2/product/{code}.json"
     headers = {"User-Agent": "Kenko-kanri/3.0 (personal use)"}
     timeout = httpx.Timeout(settings.off_timeout_seconds)

@@ -85,16 +85,21 @@ function renderChart(
   const signedMetric = metric === "balance";
   let dataMin = defined.length ? Math.min(...defined) : 0;
   let dataMax = defined.length ? Math.max(...defined) : 0;
-  let yMin = signedMetric ? Math.min(dataMin, 0) : dataMin;
+  // 変化率の誤認を防ぐため、全メトリクスで Y 軸は 0 を含める
+  let yMin = Math.min(dataMin, 0);
   let yMax = signedMetric ? Math.max(dataMax, 0) : dataMax;
   if (!defined.length) {
     yMin = 0;
     yMax = signedMetric ? 0 : 1;
   }
   if (yMin === yMax) {
-    const spread = Math.max(Math.abs(yMin) * 0.15, 1);
-    yMin -= spread;
-    yMax += spread;
+    const spread = Math.max(Math.abs(yMax) * 0.15, 1);
+    if (signedMetric) {
+      yMin -= spread;
+      yMax += spread;
+    } else {
+      yMax += spread;
+    }
   } else {
     const span = yMax - yMin;
     const padY = span * 0.12;
@@ -104,7 +109,6 @@ function renderChart(
       if (yMin < 0) yMin -= padY;
       else yMin = -padY * 0.25;
     } else {
-      yMin -= padY;
       yMax += padY;
     }
   }
@@ -148,7 +152,7 @@ function renderChart(
 
   const yTicks = signedMetric
     ? [...new Set([yMin, 0, yMax])].sort((a, b) => a - b)
-    : [yMin, (yMin + yMax) / 2, yMax];
+    : [...new Set([0, yMax])].sort((a, b) => a - b);
   const gridLines = yTicks
     .map((v) => {
       const y = yAt(v);
