@@ -82,6 +82,7 @@
 
 | フィールド | 優先順 |
 |-----------|--------|
+| barcode | 12 桁（UPC-A）入力時は先頭に `0` を付与して EAN-13 として OFF 検索 |
 | name | `product_name_ja` → `product_name` → `generic_name_ja` → `generic_name` → `"不明な商品"` |
 | kcal | `nutriments.energy-kcal_100g` → `nutriments.energy-kcal` → kJ/4.184 → 欠損時 0 |
 | protein_g | `nutriments.proteins_100g` → 0 |
@@ -139,7 +140,7 @@ v1 `meal_logs` に列追加のみ。新テーブルなし。
 |------------|------|------|---------------|-----|
 | 食事 | 「バーコード」ボタン | — | — | — |
 | スキャン | カメラプレビュー | — | BarcodeDetector 対応時 | — |
-| スキャン | 番号手入力 | — | 8〜14 桁数字 | GET /foods/barcode/{code} |
+| スキャン | 番号手入力 | — | 8〜14 桁数字（UPC-A 12 桁は先頭 0 付与して検索） | GET /foods/barcode/{code} |
 | 確認 | 名称 | ○ | 1〜200 字 | — |
 | 確認 | kcal / P / F / C | ○ | ≥0 | POST /meals |
 | 確認 | 「追加」 | ○ | — | POST /meals |

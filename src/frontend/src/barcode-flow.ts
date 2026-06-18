@@ -1,5 +1,3 @@
-import { BrowserMultiFormatReader } from "@zxing/browser";
-import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { api } from "./api/client";
 import type { FoodLookupResponse, FoodPresetCreate, MealCreate, MealSlot } from "./types";
 
@@ -19,6 +17,25 @@ declare global {
 
 const BARCODE_PATTERN = /^[0-9]{8,14}$/;
 
+type ZxingModule = {
+  BrowserMultiFormatReader: typeof import("@zxing/browser").BrowserMultiFormatReader;
+  BarcodeFormat: typeof import("@zxing/library").BarcodeFormat;
+  DecodeHintType: typeof import("@zxing/library").DecodeHintType;
+};
+
+let zxingModulePromise: Promise<ZxingModule> | null = null;
+
+function loadZxing(): Promise<ZxingModule> {
+  zxingModulePromise ??= Promise.all([import("@zxing/browser"), import("@zxing/library")]).then(
+    ([browser, library]) => ({
+      BrowserMultiFormatReader: browser.BrowserMultiFormatReader,
+      BarcodeFormat: library.BarcodeFormat,
+      DecodeHintType: library.DecodeHintType,
+    })
+  );
+  return zxingModulePromise;
+}
+
 function showToast(message: string): void {
   const el = document.createElement("div");
   el.className = "toast";
@@ -31,8 +48,21 @@ function validateBarcode(code: string): boolean {
   return BARCODE_PATTERN.test(code);
 }
 
-function zxingHints(): Map<DecodeHintType, BarcodeFormat[]> {
-  const hints = new Map<DecodeHintType, BarcodeFormat[]>();
+function normalizeBarcodeForLookup(code: string): string {
+  const trimmed = code.trim();
+  if (trimmed.length === 12) return `0${trimmed}`;
+  return trimmed;
+}
+
+function requireMealSlot(target: EntryTarget, mealSlot?: MealSlot): MealSlot | null {
+  if (target !== "meal") return null;
+  if (!mealSlot) return null;
+  return mealSlot;
+}
+
+async function zxingHints(): Promise<Map<import("@zxing/library").DecodeHintType, import("@zxing/library").BarcodeFormat[]>> {
+  const { BarcodeFormat, DecodeHintType } = await loadZxing();
+  const hints = new Map<import("@zxing/library").DecodeHintType, import("@zxing/library").BarcodeFormat[]>();
   hints.set(DecodeHintType.POSSIBLE_FORMATS, [
     BarcodeFormat.EAN_13,
     BarcodeFormat.UPC_A,
@@ -81,9 +111,13 @@ function renderConfirmForm(
         };
         await api.createPreset(body);
       } else {
+        const slot = requireMealSlot(target, mealSlot);
+        if (!slot) {
+          throw new Error("食事枠が未選択です。もう一度「入力」から開き直してください。");
+        }
         const body: MealCreate = {
           log_date: logDate,
-          meal_slot: mealSlot!,
+          meal_slot: slot,
           name: String(fd.get("name")),
           kcal: Number(fd.get("kcal")),
           protein_g: Number(fd.get("protein_g")),
@@ -121,7 +155,7 @@ function renderManualForm(
         target === "meal" && opts?.barcode
           ? `<div class="field"><label>バーコード</label><input name="barcode" value="${escapeAttr(opts.barcode)}" readonly /></div>`
           : target === "meal"
-            ? `<div class="field"><label>バーコード（任意）</label><input name="barcode" inputmode="numeric" pattern="[0-9]{8,14}" placeholder="8〜14桁" /></div>`
+            ? `<div class="field"><label>バーコード（任意）</label><input name="barcode" inputmode="numeric" placeholder="8〜14桁" /></div>`
             : ""
       }
       <div class="field"><label>名称</label><input name="name" required maxlength="200" /></div>
@@ -150,9 +184,16 @@ function renderManualForm(
         await api.createPreset(body);
       } else {
         const barcodeRaw = String(fd.get("barcode") ?? "").trim();
+        if (barcodeRaw && !validateBarcode(barcodeRaw)) {
+          throw new Error("バーコードは 8〜14 桁の数字で入力してください");
+        }
+        const slot = requireMealSlot(target, mealSlot);
+        if (!slot) {
+          throw new Error("食事枠が未選択です。もう一度「入力」から開き直してください。");
+        }
         const body: MealCreate = {
           log_date: logDate,
-          meal_slot: mealSlot!,
+          meal_slot: slot,
           name: String(fd.get("name")),
           kcal: Number(fd.get("kcal")),
           protein_g: Number(fd.get("protein_g")),
@@ -187,9 +228,10 @@ function setManualInputValue(code: string): void {
 async function decodeBarcodeFromFile(file: File): Promise<string> {
   const url = URL.createObjectURL(file);
   try {
-    const reader = new BrowserMultiFormatReader(zxingHints());
+    const { BrowserMultiFormatReader } = await loadZxing();
+    const reader = new BrowserMultiFormatReader(await zxingHints());
     const result = await reader.decodeFromImageUrl(url);
-    const code = result.getText().trim();
+    const code = normalizeBarcodeForLookup(result.getText());
     if (!validateBarcode(code)) throw new Error("invalid barcode");
     return code;
   } finally {
@@ -212,7 +254,7 @@ async function startBarcodeDetectorScan(
       .detect(video)
       .then((codes) => {
         if (!codes.length) return;
-        const code = codes[0]!.rawValue.trim();
+        const code = normalizeBarcodeForLookup(codes[0]!.rawValue);
         if (!validateBarcode(code)) return;
         onCode(code);
       })
@@ -225,10 +267,11 @@ async function startBarcodeDetectorScan(
 }
 
 async function startZxingScan(video: HTMLVideoElement, onCode: (code: string) => void): Promise<() => void> {
-  const reader = new BrowserMultiFormatReader(zxingHints(), { delayBetweenScanAttempts: 500 });
+  const { BrowserMultiFormatReader } = await loadZxing();
+  const reader = new BrowserMultiFormatReader(await zxingHints(), { delayBetweenScanAttempts: 500 });
   const controls = await reader.decodeFromVideoDevice(undefined, video, (result, _err, ctrl) => {
     if (!result) return;
-    const code = result.getText().trim();
+    const code = normalizeBarcodeForLookup(result.getText());
     if (!validateBarcode(code)) return;
     ctrl.stop();
     onCode(code);
@@ -270,7 +313,18 @@ export function openBarcodeFlow(
     if (e.target === overlay) close();
   });
 
-  const lookupAndConfirm = async (code: string): Promise<void> => {
+  const showScanError = (message: string): void => {
+    const el = document.getElementById("scan-error");
+    if (el) el.textContent = message;
+    else showToast(message);
+  };
+
+  const lookupAndConfirm = async (rawCode: string): Promise<void> => {
+    const code = normalizeBarcodeForLookup(rawCode);
+    if (!validateBarcode(code)) {
+      showScanError("8〜14桁の数字を入力してください");
+      return;
+    }
     scanCleanup?.();
     scanCleanup = null;
     body.innerHTML = `<p class="muted modal-loading">商品を検索中…</p>`;
@@ -288,11 +342,6 @@ export function openBarcodeFlow(
       showToast(reason);
       renderManualForm(body, logDate, onDone, close, { barcode: code, reason, target, mealSlot });
     }
-  };
-
-  const showScanError = (message: string): void => {
-    const el = document.getElementById("scan-error");
-    if (el) el.textContent = message;
   };
 
   const startScanUi = async (): Promise<void> => {
@@ -321,15 +370,17 @@ export function openBarcodeFlow(
     });
 
     const runSearch = async (): Promise<void> => {
-      const code = (document.getElementById("barcode-manual") as HTMLInputElement).value.trim();
-      if (!validateBarcode(code)) {
-        showScanError("8〜14桁の数字を入力してください");
-        return;
-      }
+      const code = (document.getElementById("barcode-manual") as HTMLInputElement).value;
       await lookupAndConfirm(code);
     };
 
     document.getElementById("barcode-search")!.addEventListener("click", () => void runSearch());
+    document.getElementById("barcode-manual")!.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void runSearch();
+      }
+    });
 
     const onCode = (code: string): void => {
       if (closed) return;
